@@ -15,6 +15,7 @@ def extract_metadata(inpath):
     df = pd.read_csv(inpath)
 
     #extract list of judges, their vote valences, and whether they voted with the majority
+    assert df.shape[1]>160, "df is wrong shape"
     judges = df.iloc[:,160:229]
 
     #extract info about the decisions, starting with case ID and majority vote (direct1) 
@@ -25,7 +26,7 @@ def extract_metadata(inpath):
     return df2
 
 if __name__ == "__main__": 
-    df = extract_metadata('data/merged_caselevel_data.csv')
-    outpath = 'data/metadata_compact.csv'
+    df = extract_metadata('../data/merged_caselevel_data.csv')
+    outpath = '../data/metadata_compact.csv'
     df.to_csv(outpath,index=False)
     print "File saved to %s" %outpath
