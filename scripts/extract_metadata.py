@@ -12,7 +12,7 @@ def extract_metadata(inpath):
     inputs: inpath 
     
     '''
-    df = pd.read_csv(inpath)
+    df = pd.read_csv(inpath,low_memory=False)
 
     #extract list of judges, their vote valences, and whether they voted with the majority
     assert df.shape[1]>160, "df is wrong shape"
