@@ -6,8 +6,10 @@ import collections
 import extract_metadata
 import numpy as np
 import scipy.sparse
+import sklearn.datasets
 import sys
 import time
+
 
 CASE_DATA_FILENAME = 'merged_caselevel_data.csv'
 SHARD_FILE_PREFIX = 'part-'
@@ -74,6 +76,14 @@ def extract_docvec_lines(caseids, opinion_data_dir, print_stats=False):
     return {caseid: lines[0] for caseid, lines, in caseid_opinion_lines.iteritems()}
 
 
+def print_opinion_data_stats(case_data_dir, opinion_data_dir):
+    '''Testing function'''
+    cases_df = extract_metadata.extract_metadata(case_data_dir+'/'+CASE_DATA_FILENAME)
+    caseids = cases_df['caseid']
+    extract_docvec_lines(caseids, opinion_data_dir, print_stats=True)
+
+
+# TODO change this to only use the caseids list
 def construct_sparse_opinion_matrix(case_data_dir, opinion_data_dir):
     '''
     Builds a CSR sparse matrix containing the n-gram counts from the court opinion
@@ -141,10 +151,17 @@ def construct_sparse_opinion_matrix(case_data_dir, opinion_data_dir):
     return sparse_feature_matrix, ordered_caseids
 
 
-def print_opinion_data_stats(case_data_dir, opinion_data_dir):
-    cases_df = extract_metadata.extract_metadata(case_data_dir+'/'+CASE_DATA_FILENAME)
-    caseids = cases_df['caseid']
-    extract_docvec_lines(caseids, opinion_data_dir, print_stats=True)
+# TODO test that the ordered_caseids really do index the right rows.
+# TODO normalize the matrix.
+# TODO pull in the target variable, and write that and sparse matrix to files using the svmlight format
+# instructions:
+# http://scikit-learn.org/stable/datasets/#datasets-in-svmlight-libsvm-format
+# http://www.reddit.com/r/MachineLearning/comments/l9j0e/ask_rml_i_am_extracting_ngrams_from_my_dataset/c2qzx42
+def construct_and_write_sparse_opinion_matrix(case_data_dir, opinion_data_dir):
+    sparse_feature_matrix, ordered_caseids = construct_sparse_opinion_matrix(case_data_dir, opinion_data_dir)
+    
+    # sklearn.datasets.dump_svmlight_file
+
 
 
 if __name__ == '__main__':
