@@ -1,11 +1,17 @@
+'''Code for parsing docvec_text shards into a sparse matrix.'''
 
+__author__ = 'Alex Pine'
 
 import collections
 import extract_metadata
+import numpy as np
+import scipy.sparse
 import sys
+import time
 
 CASE_DATA_FILENAME = 'merged_caselevel_data.csv'
 SHARD_FILE_PREFIX = 'part-'
+# NOTE: change this to control the number of shard files to read. Max number is 1340.
 NUM_SHARDS = 1340
 
 # Stats:
@@ -68,13 +74,71 @@ def extract_docvec_lines(caseids, opinion_data_dir, print_stats=False):
     return {caseid: lines[0] for caseid, lines, in caseid_opinion_lines.iteritems()}
 
 
-# TODO
-def merge_data(case_data_dir, opinion_data_dir):
+def construct_sparse_opinion_matrix(case_data_dir, opinion_data_dir):
+    '''
+    Builds a CSR sparse matrix containing the n-gram counts from the court opinion
+    shard files.
+    NOTE: This takes ~6 minutes to run on my macbook.
+
+    Args:
+      case_data_dir: The directory where the case data file resides.
+      opinion_data_dir :The directory where the opinion n-gram shard files reside.
+
+    Returns:
+      sparse_feature_matrix: A scipy.sparse.csr_matrix with n-gram counts.
+      ordered_caseids: A list of case ID strings. The index of each case ID
+        corresponds to the index of corresponding row of n-grams in sparse_feature_matrix.
+    '''
+    start_time = time.time()
+    # Read in cases, get te list of case IDs
     cases_df = extract_metadata.extract_metadata(case_data_dir+'/'+CASE_DATA_FILENAME)
     caseids = cases_df['caseid']
+    # Extract only the n-grams with the given case IDs
     caseid_opinion_lines = extract_docvec_lines(caseids, opinion_data_dir)
-    # TODO now take these lines, split them by '||', and expand the ngrams into their own columns
-    # TODO best way to represent the sparse data?
+
+    # Constants needed to parse opinion lines
+    SEPARATOR = "', '"
+    SEPARATOR_ALT = "\", '"
+    NGRAM_SEPARATOR = "||"
+
+    # This caseids will be sorted in the order that the final matrix is sorted.
+    ordered_caseids = []
+
+    # Incrementally constructing csr sparse matrix using these instructions:
+    # http://www.reddit.com/r/MachineLearning/comments/l9j0e/ask_rml_i_am_extracting_ngrams_from_my_dataset/c2qzx42
+    values = []
+    indices = []
+    indptr = [0]
+    for caseid, opinion_line in caseid_opinion_lines.iteritems():
+        # Each line into metadata portion and ngram portion, separated by either
+        # ', ' or ", '
+        separator_index = opinion_line.find(SEPARATOR)
+        if separator_index == -1:
+            separator_index = opinion_line.find(SEPARATOR_ALT)
+            assert separator_index != -1, 'Unparsable opinion line. Case ID: %s' % (caseid)
+        ngram_line = opinion_line[separator_index+len(SEPARATOR):]
+        assert len(ngram_line) > 0 and ngram_line[0] != "'" and ngram_line[-1] != "'", 'bad ngram line at case %s' % (caseid)
+        ngrams = ngram_line.split('||')
+        for ngram in ngrams:
+            ngram_id, count = ngram.split(':')
+            assert ngram_id != '', 'Bad ngram ID: %s' % ngram_id
+            count = int(count)
+            assert count > 0, 'Bad ngram count %d' % count
+            ordered_caseids.append(caseid)
+            indices.append(ngram_id)
+            values.append(count)
+            
+        # Update row markers for sparse matrix
+        indptr.append(indptr[-1] + len(ngrams)) 
+    
+    sparse_feature_matrix = scipy.sparse.csr_matrix((values, indices, indptr), dtype=np.int)
+
+    print 'sparse matrix constructed!'
+    print 'shape: ', sparse_feature_matrix.get_shape()
+    print 'number of cases', len(caseid_opinion_lines)
+    print 'total time:', time.time() - start_time
+
+    return sparse_feature_matrix, ordered_caseids
 
 
 def print_opinion_data_stats(case_data_dir, opinion_data_dir):
@@ -84,6 +148,9 @@ def print_opinion_data_stats(case_data_dir, opinion_data_dir):
 
 
 if __name__ == '__main__':
-    print_opinion_data_stats('/Users/pinesol/mlcs_data/', 
-                             '/Users/pinesol/mlcs_data/docvec_text')
+#    print_opinion_data_stats('/Users/pinesol/mlcs_data/', 
+#                             '/Users/pinesol/mlcs_data/docvec_text')
+    construct_sparse_opinion_matrix('/Users/pinesol/mlcs_data/', 
+                                    '/Users/pinesol/mlcs_data/docvec_text')
+
     
