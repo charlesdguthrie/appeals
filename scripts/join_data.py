@@ -7,6 +7,7 @@ import extract_metadata
 import numpy as np
 import scipy.sparse
 import sklearn.datasets
+import sklearn.feature_extraction
 import sys
 import time
 
@@ -83,8 +84,70 @@ def print_opinion_data_stats(case_data_dir, opinion_data_dir):
     extract_docvec_lines(caseids, opinion_data_dir, print_stats=True)
 
 
-# TODO change this to only use the caseids list
+# TODO
+# Create regular dictionary of counts
+# Remove the ones that barely ever occur
+# use DictVectorizer from sklearn.feature_extraction to make a csr.
+# Then do tfidf?
+# http://scikit-learn.org/stable/modules/generated/sklearn.feature_extraction.text.TfidfTransformer.html#sklearn.feature_extraction.text.TfidfTransformer
+# Then do chi2?
 def construct_sparse_opinion_matrix(case_data_dir, opinion_data_dir):
+    start_time = time.time()
+    # Read in cases, get te list of case IDs
+    cases_df = extract_metadata.extract_metadata(case_data_dir+'/'+CASE_DATA_FILENAME)
+    caseids = cases_df['caseid']
+    # Extract only the n-grams with the given case IDs
+    caseid_opinion_lines = extract_docvec_lines(caseids, opinion_data_dir)
+
+    # Constants needed to parse opinion lines
+    SEPARATOR = "', '"
+    SEPARATOR_ALT = "\", '"
+    NGRAM_SEPARATOR = "||"
+
+    # This caseids will be sorted in the order that the final matrix is sorted.
+    ordered_caseids = []
+
+    # List of dictionaries of ngram counts
+    rows_ngram_counts = []
+
+    for caseid, opinion_line in caseid_opinion_lines.iteritems():
+        # Each line into metadata portion and ngram portion, separated by either
+        # ', ' or ", '
+        separator_index = opinion_line.find(SEPARATOR)
+        if separator_index == -1:
+            separator_index = opinion_line.find(SEPARATOR_ALT)
+            assert separator_index != -1, 'Unparsable opinion line. Case ID: %s' % (caseid)
+        ngram_line = opinion_line[separator_index+len(SEPARATOR):]
+        assert len(ngram_line) > 0 and ngram_line[0] != "'" and ngram_line[-1] != "'", 'bad ngram line at case %s' % (caseid)
+        ngrams = ngram_line.split('||')
+        ngram_counts = {}
+        for ngram in ngrams:
+            ngram_id, count = ngram.split(':')
+            assert ngram_id != '', 'Bad ngram ID: %s' % ngram_id
+            count = int(count)
+            assert count > 0, 'Bad ngram count %d' % count
+            ngram_counts[ngram_id] = count
+        ordered_caseids.append(caseid)
+        rows_ngram_counts.append(ngram_counts)
+
+    # Make sure the matrics created by this vectorizer are sparse.
+    # TODO set sort=False?
+    dict_vectorizer = sklearn.feature_extraction.DictVectorizer(sparse=True)
+    sparse_feature_matrix = dict_vectorizer.fit_transform(rows_ngram_counts)
+    # TODO
+    print 'shape: ', sparse_feature_matrix.get_shape()
+    print 'number of cases', len(caseid_opinion_lines)
+    print 'total time:', time.time() - start_time
+
+    return sparse_feature_matrix, ordered_caseids
+
+
+# TODO idea: create a lil matrix instead of csr.
+# Slice and dice this matrix
+# Convert to csr
+
+# TODO change this to only use the caseids list
+def construct_sparse_opinion_matrix_OLD(case_data_dir, opinion_data_dir):
     '''
     Builds a CSR sparse matrix containing the n-gram counts from the court opinion
     shard files.
@@ -134,9 +197,9 @@ def construct_sparse_opinion_matrix(case_data_dir, opinion_data_dir):
             assert ngram_id != '', 'Bad ngram ID: %s' % ngram_id
             count = int(count)
             assert count > 0, 'Bad ngram count %d' % count
-            ordered_caseids.append(caseid)
             indices.append(ngram_id)
             values.append(count)
+        ordered_caseids.append(caseid)
             
         # Update row markers for sparse matrix
         indptr.append(indptr[-1] + len(ngrams)) 
@@ -151,8 +214,11 @@ def construct_sparse_opinion_matrix(case_data_dir, opinion_data_dir):
     return sparse_feature_matrix, ordered_caseids
 
 
+# TODO Do best chi2 feature pruning
+# http://scikit-learn.org/stable/modules/feature_selection.html#univariate-feature-selection
 # TODO test that the ordered_caseids really do index the right rows.
-# TODO normalize the matrix.
+# TODO normalize the matrix. Do you normalize train and test?
+# TODO make sure all test data occurs AFTER training data in time.
 # TODO pull in the target variable, and write that and sparse matrix to files using the svmlight format
 # instructions:
 # http://scikit-learn.org/stable/datasets/#datasets-in-svmlight-libsvm-format
