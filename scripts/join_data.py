@@ -244,14 +244,14 @@ def create_valences(cases_df, case_ids):
         if valence == UNKNOWN_VALENCE:
             valence = NEUTRAL_VALENCE
         valences.append(valence)
-    return valences
+    return np.array(valences)
 
-# TODO tfidf
 # http://scikit-learn.org/stable/modules/generated/sklearn.feature_extraction.text.TfidfTransformer.html#sklearn.feature_extraction.text.TfidfTransformer
 # TODO chi2?
 def construct_sparse_opinion_matrix(cases_df, opinion_data_dir,
                                     num_opinion_shards=TOTAL_NUM_SHARDS,
-                                    min_required_count=100):
+                                    min_required_count=100,
+                                    tfidf=True):
     '''
     Builds a CSR sparse matrix containing the n-gram counts from the court
     opinion shard files. Also returns the coresponding case_ids and valences.
@@ -268,6 +268,8 @@ def construct_sparse_opinion_matrix(cases_df, opinion_data_dir,
         to TOTAL_NUM_SHARDS.
       min_required_count: The minimum number of of times an n-gram must appear
         throughout all documents in order to be included in the data.
+      tfidf: Boolean. If set, the returned feature matrix has been normalized
+        using TF-IDF.
 
     Returns:
       sparse_feature_matrix: A scipy.sparse.csr_matrix with n-gram counts.
@@ -291,6 +293,10 @@ def construct_sparse_opinion_matrix(cases_df, opinion_data_dir,
     # set sort=False so that the ordering of the rows by date is preserved.
     dict_vectorizer = sklearn.feature_extraction.DictVectorizer(sparse=True, sort=False)
     sparse_feature_matrix = dict_vectorizer.fit_transform(rows_ngram_counts)
+
+    if tfidf:
+        transformer = sklearn.feature_extraction.text.TfidfTransformer()
+        sparse_feature_matrix = transformer.fit_transform(sparse_feature_matrix)
 
     assert sparse_feature_matrix.get_shape()[0] == len(case_ids)
     assert len(valences) == len(case_ids)
@@ -319,7 +325,7 @@ if __name__ == '__main__':
     # Read in cases, get te list of case IDs
     case_data_dir = '/Users/pinesol/mlcs_data'
     cases_df = extract_metadata.extract_metadata(case_data_dir+'/'+CASE_DATA_FILENAME)
-    num_shards = 10#1340
+    num_shards = 10 #1340
     construct_sparse_opinion_matrix(cases_df, 
                                     '/Users/pinesol/mlcs_data/docvec_text',
                                     num_opinion_shards=num_shards)
