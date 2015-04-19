@@ -5,6 +5,7 @@ __author__ = 'Alex Pine'
 import collections
 import extract_metadata
 import numpy as np
+import random
 import scipy.sparse
 import sklearn.datasets
 import sklearn.feature_extraction
@@ -34,6 +35,7 @@ def extract_docvec_lines(case_ids, opinion_data_dir, num_opinion_shards,
       case_ids: an iterable of case ID strings.
       opinion_data_dir: string. The directory that contains the court opinion 
         n-grams.
+      num_opinion_shards: The maximum number of opinion shard files to read.
       print_stats: If true, prints the number of opinions per case_id.
 
     Returns:
@@ -85,18 +87,54 @@ def print_opinion_data_stats(case_data_dir, opinion_data_dir):
     extract_docvec_lines(case_ids, opinion_data_dir, TOTAL_NUM_SHARDS, print_stats=True)
 
 
-# TODO
-# Remove the ones that barely ever occur
-# do tfidf?
-# http://scikit-learn.org/stable/modules/generated/sklearn.feature_extraction.text.TfidfTransformer.html#sklearn.feature_extraction.text.TfidfTransformer
-# Then do chi2?
-# TODO update comments
-def construct_sparse_opinion_matrix(case_ids, opinion_data_dir,
-                                    num_opinion_shards=TOTAL_NUM_SHARDS):
+# TODO Do experiments to find the best value for this.
+def filter_infrequent_ngrams(rows_ngram_counts, case_ids, min_required_count):
     '''
-    Builds a CSR sparse matrix containing the n-gram counts from the court opinion
+    Counts the number of times each n-gram occurs throughout the corpus, and 
+    filters out the low-occuring ones.
+
+    Args:
+      rows_ngram_counts: The list of n-gram counts for each case.
+      case_ids: The case IDs corresponding to each set of n-grams.
+      min_required_count: Positive integer. The minimum number of times an
+        n-gram must occur in total in order to be left in.
+
+    Returns:
+      filtered_rows_ngram_counts: The list of n-gram counts for each case. The
+        infrequently occuring n-grams have been filtered out. If all of the 
+          n-grams of a document were removed, the whole row was removed.
+      filtered_case_ids: The case IDs corresponding to each set of filtered 
+        n-grams.
+    '''
+    total_ngram_counts = collections.defaultdict(int)
+    for ngram_counts in rows_ngram_counts:
+        for ngram_id, count in ngram_counts.iteritems():
+            total_ngram_counts[ngram_id] += count
+    ngrams_to_keep = set([])
+    for ngram_id, count in total_ngram_counts.iteritems():
+        if count >= min_required_count:
+            ngrams_to_keep.add(ngram_id)
+
+    # TODO This is really slow...
+    filtered_rows_ngram_counts = []
+    filtered_case_ids = []
+    for i, ngram_counts in enumerate(rows_ngram_counts):
+        filtered_ngram_counts = {}
+        for ngram_id, count in ngram_counts.iteritems():
+            if ngram_id in ngrams_to_keep:
+                filtered_ngram_counts[ngram_id] = count
+        if filtered_ngram_counts:
+            filtered_rows_ngram_counts.append(filtered_ngram_counts)
+            filtered_case_ids.append(case_ids[i])
+
+    return filtered_rows_ngram_counts, filtered_case_ids
+
+
+def parse_opinion_shards(case_ids, opinion_data_dir, num_opinion_shards):
+    '''
+    Builds a dictionary containing the n-gram counts from the court opinion
     shard files.
-    NOTE: This takes ~6 minutes to run on my macbook.
+    NOTE: This takes ~10 minutes to run on my macbook on all shards.
 
     Args:
       case_ids: The list of case_ids to extract.
@@ -106,12 +144,11 @@ def construct_sparse_opinion_matrix(case_ids, opinion_data_dir,
         to TOTAL_NUM_SHARDS.
 
     Returns:
-      sparse_feature_matrix: A scipy.sparse.csr_matrix with n-gram counts.
+      rows_ngram_counts: A list of dictionaries containing n-gram counts.
       ordered_case_ids: A list of case ID strings. The index of each case ID
         corresponds to the index of corresponding row of n-grams in
         sparse_feature_matrix.
     '''
-    start_time = time.time()
     # Extract only the n-grams with the given case IDs
     case_id_opinion_lines = extract_docvec_lines(case_ids, opinion_data_dir, 
                                                  num_opinion_shards)
@@ -122,11 +159,11 @@ def construct_sparse_opinion_matrix(case_ids, opinion_data_dir,
     NGRAM_SEPARATOR = "||"
 
     # This case_ids will be sorted in the order that the final matrix is sorted.
-    ordered_case_ids = sorted(case_id_opinion_lines.keys())
+    filtered_case_ids = case_id_opinion_lines.keys()
     # List of dictionaries of ngram counts
     rows_ngram_counts = []
 
-    for case_id in ordered_case_ids:
+    for case_id in filtered_case_ids:
         opinion_line = case_id_opinion_lines[case_id]
         # Each line into metadata portion and ngram portion, separated by either
         # ', ' or ", '
@@ -135,7 +172,8 @@ def construct_sparse_opinion_matrix(case_ids, opinion_data_dir,
             separator_index = opinion_line.find(SEPARATOR_ALT)
             assert separator_index != -1, 'Unparsable opinion line. Case ID: %s' % (case_id)
         ngram_line = opinion_line[separator_index+len(SEPARATOR):]
-        assert len(ngram_line) > 0 and ngram_line[0] != "'" and ngram_line[-1] != "'", 'bad ngram line at case %s' % (case_id)
+        assert (len(ngram_line) > 0 and ngram_line[0] != "'" 
+                and ngram_line[-1] != "'", 'bad ngram line at case %s' % (case_id))
         ngrams = ngram_line.split('||')
         ngram_counts = {}
         for ngram in ngrams:
@@ -145,33 +183,134 @@ def construct_sparse_opinion_matrix(case_ids, opinion_data_dir,
             assert count > 0, 'Bad ngram count %d' % count
             ngram_counts[ngram_id] = count
         rows_ngram_counts.append(ngram_counts)
+    # Testing code
+    assert len(rows_ngram_counts) == len(filtered_case_ids)
+    for i in random.sample(range(len(rows_ngram_counts)), len(rows_ngram_counts)/100):
+        case_id = filtered_case_ids[i]
+        opinion_line = case_id_opinion_lines[case_id]
+        ngram_counts = rows_ngram_counts[i]
+        for ngram_id, count in ngram_counts.iteritems():
+            assert opinion_line.find(case_id) != -1
+            assert opinion_line.find(ngram_id) != -1
+            assert opinion_line.find(str(count)) != -1
+
+    return rows_ngram_counts, filtered_case_ids
+
+
+def sort_case_lists(cases_df, rows_ngram_counts, case_ids):
+    '''
+    Sorts the ngram_count dictionaries and case_ids by the date that each case 
+    occured on, from oldest to newest.
+
+    Args:
+      cases_df: The dataframe of cases information. Used to get the case dates.
+      rows_ngram_counts: The list of n-gram counts for each case.
+      case_ids: The case IDs corresponding to each set of n-grams.
+
+    Returns:
+      rows_ngram_counts: The list of n-gram counts for each case, sorted by the
+        date of the corresponding case.
+      case_ids: The case IDs corresponding to each set of n-grams, sorted by the
+        date of the corresponding case.
+    '''
+    # Case ID -> date as integer YYYYMMDD.
+    case_id_date_map = {}
+    for index, row in cases_df.iterrows():
+        date_int = int(str(row['year']) + str(int(float(row['month']))).zfill(2)
+                       + str(int(float(row['day']))).zfill(2))
+        case_id_date_map[row['caseid']] = date_int
+    # This creates a list of (index, case_id) pairs, sorted by the date 
+    # corresponding to the case ID.
+    sorted_index_case_id_pairs = sorted(enumerate(case_ids), 
+                                        key=lambda tup: case_id_date_map[tup[1]])
+
+    # TODO this is not in place and will be memory intensive
+    case_ids = [case_ids[i] for i, caseid in sorted_index_case_id_pairs]
+    rows_ngram_counts = [rows_ngram_counts[i] for i, caseid in sorted_index_case_id_pairs]
+    # testing code
+    sorted_dateints = [case_id_date_map[caseid] for i, caseid in sorted_index_case_id_pairs]
+    assert sorted_dateints == sorted(sorted_dateints)
+
+    return rows_ngram_counts, case_ids
+
+
+def create_valences(cases_df, case_ids):
+    '''Retreives the valences corresponding to case_ids. Recode unknown valences to neutral.'''
+    UNKNOWN_VALENCE = 0
+    NEUTRAL_VALENCE = 2
+    valences = []
+    for case_id in case_ids:
+        valence = int(cases_df[cases_df['caseid'] == case_id]['direct1'].values[0])
+        # Replacing unknown valence variables with netural scores.
+        if valence == UNKNOWN_VALENCE:
+            valence = NEUTRAL_VALENCE
+        valences.append(valence)
+    return valences
+
+# TODO tfidf
+# http://scikit-learn.org/stable/modules/generated/sklearn.feature_extraction.text.TfidfTransformer.html#sklearn.feature_extraction.text.TfidfTransformer
+# TODO chi2?
+def construct_sparse_opinion_matrix(cases_df, opinion_data_dir,
+                                    num_opinion_shards=TOTAL_NUM_SHARDS,
+                                    min_required_count=100):
+    '''
+    Builds a CSR sparse matrix containing the n-gram counts from the court
+    opinion shard files. Also returns the coresponding case_ids and valences.
+    The rows of these lists are sorted in order of the dates of the
+    corresponding cases, oldest to newest.
+    NOTE: This takes ~10 minutes to run with all shards on my macbook.
+
+    Args:
+      case_df: A dataframe containing the case variables. Must include caseid, 
+        year, month, day, and direct1.
+      opinion_data_dir: The directory where the opinion n-gram shard files
+        reside.
+      num_opinion_shards: The number of opinion shard files to read in. Defaults
+        to TOTAL_NUM_SHARDS.
+      min_required_count: The minimum number of of times an n-gram must appear
+        throughout all documents in order to be included in the data.
+
+    Returns:
+      sparse_feature_matrix: A scipy.sparse.csr_matrix with n-gram counts.
+      ordered_case_ids: A list of case ID strings. The index of each case ID
+        corresponds to the index of corresponding row of n-grams in
+        sparse_feature_matrix.
+      valences: A list of valences as ints, with the unknown valences (0) 
+        replaced with the neutral valence (2).
+    '''
+    start_time = time.time()
+
+    case_ids_df = cases_df['caseid']
+
+    rows_ngram_counts, case_ids = parse_opinion_shards(case_ids_df, opinion_data_dir, num_opinion_shards)
+    rows_ngram_counts, case_ids = filter_infrequent_ngrams(rows_ngram_counts, case_ids, min_required_count)
+    rows_ngram_counts, case_ids = sort_case_lists(cases_df, rows_ngram_counts, case_ids)
+
+    valences = create_valences(cases_df, case_ids)
 
     # Make sure the matrics created by this vectorizer are sparse.
-    # TODO set sort=False?
-    dict_vectorizer = sklearn.feature_extraction.DictVectorizer(sparse=True)
+    # set sort=False so that the ordering of the rows by date is preserved.
+    dict_vectorizer = sklearn.feature_extraction.DictVectorizer(sparse=True, sort=False)
     sparse_feature_matrix = dict_vectorizer.fit_transform(rows_ngram_counts)
-    # TODO
-    assert sparse_feature_matrix.get_shape()[0] == len(ordered_case_ids)
+
+    assert sparse_feature_matrix.get_shape()[0] == len(case_ids)
+    assert len(valences) == len(case_ids)
+
     print 'shape: ', sparse_feature_matrix.get_shape()
-    print 'number of cases', len(case_id_opinion_lines)
+    print 'number of cases', len(case_ids)
     print 'total time:', time.time() - start_time
 
-    return sparse_feature_matrix, ordered_case_ids
+    return sparse_feature_matrix, case_ids, valences
 
 
-
-# TODO Do best chi2 feature pruning
-# http://scikit-learn.org/stable/modules/feature_selection.html#univariate-feature-selection
-# TODO test that the ordered_case_ids really do index the right rows.
-# TODO normalize the matrix. Do you normalize train and test?
-# TODO make sure all test data occurs AFTER training data in time.
 # TODO pull in the target variable, and write that and sparse matrix to files using the svmlight format
 # instructions:
+# http://scikit-learn.org/stable/modules/feature_selection.html#univariate-feature-selection
 # http://scikit-learn.org/stable/datasets/#datasets-in-svmlight-libsvm-format
 # http://www.reddit.com/r/MachineLearning/comments/l9j0e/ask_rml_i_am_extracting_ngrams_from_my_dataset/c2qzx42
 def construct_and_write_sparse_opinion_matrix(case_data_dir, opinion_data_dir):
     sparse_feature_matrix, ordered_case_ids = construct_sparse_opinion_matrix(case_data_dir, opinion_data_dir)
-    
+    # TODO
     # sklearn.datasets.dump_svmlight_file
 
 
@@ -181,10 +320,7 @@ if __name__ == '__main__':
     # Read in cases, get te list of case IDs
     case_data_dir = '/Users/pinesol/mlcs_data'
     cases_df = extract_metadata.extract_metadata(case_data_dir+'/'+CASE_DATA_FILENAME)
-    case_ids = cases_df['caseid']
-    num_shards = 100
-    construct_sparse_opinion_matrix(case_ids, 
+    num_shards = 1340
+    construct_sparse_opinion_matrix(cases_df, 
                                     '/Users/pinesol/mlcs_data/docvec_text',
                                     num_opinion_shards=num_shards)
-
-    
