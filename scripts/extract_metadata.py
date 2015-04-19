@@ -38,6 +38,7 @@ def extract_metadata(inpath):
     df2 = pd.concat([y,decisions,judges],axis=1)
     return df2
 
+#TODO: Split on a pivot date, rather than random: train is before X date, test is after
 def label_feature_split(df,labelName, test_pct=0.25, first_feature_column=6):
     '''
     Splits a dataframe into X_train, X_test, y_train, y_test for a given y label

@@ -21,6 +21,10 @@ def evenSplit(dat,fld):
 def trainTest(dat, pct):
     '''
     Randomly splits data into train and test
+
+    Args:
+        dat: data frame or matrix
+        pct: percent that will be training
     '''
     dat_shuf = dat.reindex(np.random.permutation(dat.index))
     trn = dat_shuf[:int(np.floor(dat_shuf.shape[0]*pct))]
