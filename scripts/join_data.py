@@ -172,8 +172,7 @@ def parse_opinion_shards(case_ids, opinion_data_dir, num_opinion_shards):
             separator_index = opinion_line.find(SEPARATOR_ALT)
             assert separator_index != -1, 'Unparsable opinion line. Case ID: %s' % (case_id)
         ngram_line = opinion_line[separator_index+len(SEPARATOR):]
-        assert (len(ngram_line) > 0 and ngram_line[0] != "'" 
-                and ngram_line[-1] != "'", 'bad ngram line at case %s' % (case_id))
+        assert len(ngram_line) > 0 and ngram_line[0] != "'" and ngram_line[-1] != "'", 'bad ngram line at case %s' % (case_id)
         ngrams = ngram_line.split('||')
         ngram_counts = {}
         for ngram in ngrams:
@@ -320,7 +319,7 @@ if __name__ == '__main__':
     # Read in cases, get te list of case IDs
     case_data_dir = '/Users/pinesol/mlcs_data'
     cases_df = extract_metadata.extract_metadata(case_data_dir+'/'+CASE_DATA_FILENAME)
-    num_shards = 1340
+    num_shards = 10#1340
     construct_sparse_opinion_matrix(cases_df, 
                                     '/Users/pinesol/mlcs_data/docvec_text',
                                     num_opinion_shards=num_shards)
