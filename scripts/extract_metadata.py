@@ -32,7 +32,7 @@ def extract_metadata(inpath):
     y.head()
 
     #extract other info about the decisions, starting with case ID and majority vote (direct1) 
-    decisions = df.loc[:,('geniss','casetyp1','treat','majvotes','dissent','concur','casetyp2','direct2')]
+    decisions = df.loc[:,('geniss','casetyp1','treat','majvotes','dissent','concur','casetyp2','direct2', 'year', 'month', 'day')]
 
     #merge labels, judges and decisions
     df2 = pd.concat([y,decisions,judges],axis=1)
