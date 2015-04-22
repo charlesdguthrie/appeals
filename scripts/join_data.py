@@ -379,3 +379,12 @@ if __name__ == '__main__':
               cases_df, 
               '/Users/pinesol/mlcs_data/docvec_text',
               num_opinion_shards=num_shards)
+
+    # case_data_dir = '../data'
+    # cases_df = extract_metadata.extract_metadata(case_data_dir+'/'+CASE_DATA_FILENAME)
+    # num_shards = 1340
+    # load_data(case_data_dir+'/feature_matrix.svmlight',
+    #           case_data_dir+'/case_ids.p',
+    #           cases_df, 
+    #           case_data_dir+'/docvec_text',
+    #           num_opinion_shards=num_shards)
