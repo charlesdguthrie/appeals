@@ -248,10 +248,7 @@ def create_valences(cases_df, case_ids):
         valences.append(valence)
     return np.array(valences)
 
-# TODO chi2
-# http://scikit-learn.org/stable/modules/feature_selection.html#univariate-feature-selection
-# TODO LARS path?
-# http://scikit-learn.org/stable/auto_examples/linear_model/plot_lasso_lars.html
+
 def construct_sparse_opinion_matrix(cases_df, opinion_data_dir,
                                     num_opinion_shards=TOTAL_NUM_SHARDS,
                                     min_required_count=100,
@@ -288,7 +285,8 @@ def construct_sparse_opinion_matrix(cases_df, opinion_data_dir,
     case_ids_df = cases_df['caseid']
 
     rows_ngram_counts, case_ids = parse_opinion_shards(case_ids_df, opinion_data_dir, num_opinion_shards)
-    rows_ngram_counts, case_ids = filter_infrequent_ngrams(rows_ngram_counts, case_ids, min_required_count)
+    if min_required_count > 1:
+        rows_ngram_counts, case_ids = filter_infrequent_ngrams(rows_ngram_counts, case_ids, min_required_count)
     rows_ngram_counts, case_ids = sort_case_lists(cases_df, rows_ngram_counts, case_ids)
 
     valences = create_valences(cases_df, case_ids)
@@ -355,12 +353,13 @@ def load_data(matrix_data_filename,
             sparse_feature_matrix, valences = sklearn.datasets.load_svmlight_file(f)
         with open(case_ids_filename, 'rb') as f:
             case_ids = pickle.load(f)
+        print 'Data Loaded'
     else:
         print 'Constructing data from scratch...'
         sparse_feature_matrix, case_ids, valences = construct_sparse_opinion_matrix(
             cases_df, opinion_data_dir, num_opinion_shards=num_opinion_shards,
             min_required_count=min_required_count, tfidf=tfidf)
-        # Save results to disk
+        print 'Writing results to disk'
         sklearn.datasets.dump_svmlight_file(sparse_feature_matrix, valences, matrix_data_filename)
         with open(case_ids_filename, 'wb') as f:
             pickle.dump(case_ids, f)
@@ -368,14 +367,13 @@ def load_data(matrix_data_filename,
 
 
 if __name__ == '__main__':
-#    print_opinion_data_stats('/Users/pinesol/mlcs_data/', 
-#                             '/Users/pinesol/mlcs_data/docvec_text')
-    # Read in cases, get te list of case IDs
     case_data_dir = '/Users/pinesol/mlcs_data'
     cases_df = extract_metadata.extract_metadata(case_data_dir+'/'+CASE_DATA_FILENAME)
     num_shards = 1340
-    load_data('/tmp/feature_matrix.svmlight',
-              '/tmp/case_ids.p',
+    min_required_count = 10
+    load_data('/tmp/no_filter_feature_matrix.svmlight',
+              '/tmp/no_filter_case_ids.p',
               cases_df, 
               '/Users/pinesol/mlcs_data/docvec_text',
-              num_opinion_shards=num_shards)
+              num_opinion_shards=num_shards,
+              min_required_count=min_required_count)
