@@ -1,17 +1,18 @@
-'''Code for parsing docvec_text shards into a sparse matrix.'''
+"""Code for parsing docvec_text shards into a sparse matrix."""
 
 __author__ = 'Alex Pine'
 
 import collections
+import cPickle as pickle
 import extract_metadata
 import numpy as np
+import os
 import random
 import scipy.sparse
 import sklearn.datasets
 import sklearn.feature_extraction
 import sys
 import time
-
 
 CASE_DATA_FILENAME = 'merged_caselevel_data.csv'
 SHARD_FILE_PREFIX = 'part-'
@@ -24,9 +25,10 @@ TOTAL_NUM_SHARDS = 1340
 # Number of cases with 2 opinions: 1630
 # Number of cases with 3 opinions: 82
 
+
 def extract_docvec_lines(case_ids, opinion_data_dir, num_opinion_shards, 
                          print_stats=False):
-    '''
+    """
     Opens the court opinion n-gram files, and extracts the lines that have a
     case_id in the given list. 
     NOTE: Only case_ids with exactly one opinion are returned.
@@ -40,7 +42,7 @@ def extract_docvec_lines(case_ids, opinion_data_dir, num_opinion_shards,
 
     Returns:
       A dict that maps a case_id string to a '||' delimited opinion n-gram line.
-    '''
+    """
     # NOTE: Throwing out cases with more than one opinion.
     case_ids = frozenset(case_ids)
     # convert case_ids to a hashset for fast lookup
@@ -81,7 +83,7 @@ def extract_docvec_lines(case_ids, opinion_data_dir, num_opinion_shards,
 
 
 def print_opinion_data_stats(case_data_dir, opinion_data_dir):
-    '''Testing function'''
+    """Testing function"""
     cases_df = extract_metadata.extract_metadata(case_data_dir+'/'+CASE_DATA_FILENAME)
     case_ids = cases_df['caseid']
     extract_docvec_lines(case_ids, opinion_data_dir, TOTAL_NUM_SHARDS, print_stats=True)
@@ -89,7 +91,7 @@ def print_opinion_data_stats(case_data_dir, opinion_data_dir):
 
 # TODO Do experiments to find the best value for this.
 def filter_infrequent_ngrams(rows_ngram_counts, case_ids, min_required_count):
-    '''
+    """
     Counts the number of times each n-gram occurs throughout the corpus, and 
     filters out the low-occuring ones.
 
@@ -105,7 +107,7 @@ def filter_infrequent_ngrams(rows_ngram_counts, case_ids, min_required_count):
           n-grams of a document were removed, the whole row was removed.
       filtered_case_ids: The case IDs corresponding to each set of filtered 
         n-grams.
-    '''
+    """
     total_ngram_counts = collections.defaultdict(int)
     for ngram_counts in rows_ngram_counts:
         for ngram_id, count in ngram_counts.iteritems():
@@ -131,7 +133,7 @@ def filter_infrequent_ngrams(rows_ngram_counts, case_ids, min_required_count):
 
 
 def parse_opinion_shards(case_ids, opinion_data_dir, num_opinion_shards):
-    '''
+    """
     Builds a dictionary containing the n-gram counts from the court opinion
     shard files.
     NOTE: This takes ~10 minutes to run on my macbook on all shards.
@@ -148,7 +150,7 @@ def parse_opinion_shards(case_ids, opinion_data_dir, num_opinion_shards):
       ordered_case_ids: A list of case ID strings. The index of each case ID
         corresponds to the index of corresponding row of n-grams in
         sparse_feature_matrix.
-    '''
+    """
     # Extract only the n-grams with the given case IDs
     case_id_opinion_lines = extract_docvec_lines(case_ids, opinion_data_dir, 
                                                  num_opinion_shards)
@@ -197,7 +199,7 @@ def parse_opinion_shards(case_ids, opinion_data_dir, num_opinion_shards):
 
 
 def sort_case_lists(cases_df, rows_ngram_counts, case_ids):
-    '''
+    """
     Sorts the ngram_count dictionaries and case_ids by the date that each case 
     occured on, from oldest to newest.
 
@@ -211,7 +213,7 @@ def sort_case_lists(cases_df, rows_ngram_counts, case_ids):
         date of the corresponding case.
       case_ids: The case IDs corresponding to each set of n-grams, sorted by the
         date of the corresponding case.
-    '''
+    """
     # Case ID -> date as integer YYYYMMDD.
     case_id_date_map = {}
     for index, row in cases_df.iterrows():
@@ -234,7 +236,7 @@ def sort_case_lists(cases_df, rows_ngram_counts, case_ids):
 
 
 def create_valences(cases_df, case_ids):
-    '''Retreives the valences corresponding to case_ids. Recode unknown valences to neutral.'''
+    """Retreives the valences corresponding to case_ids. Recode unknown valences to neutral."""
     UNKNOWN_VALENCE = 0
     NEUTRAL_VALENCE = 2
     valences = []
@@ -246,13 +248,15 @@ def create_valences(cases_df, case_ids):
         valences.append(valence)
     return np.array(valences)
 
-# http://scikit-learn.org/stable/modules/generated/sklearn.feature_extraction.text.TfidfTransformer.html#sklearn.feature_extraction.text.TfidfTransformer
-# TODO chi2?
+# TODO chi2
+# http://scikit-learn.org/stable/modules/feature_selection.html#univariate-feature-selection
+# TODO LARS path?
+# http://scikit-learn.org/stable/auto_examples/linear_model/plot_lasso_lars.html
 def construct_sparse_opinion_matrix(cases_df, opinion_data_dir,
                                     num_opinion_shards=TOTAL_NUM_SHARDS,
                                     min_required_count=100,
                                     tfidf=True):
-    '''
+    """
     Builds a CSR sparse matrix containing the n-gram counts from the court
     opinion shard files. Also returns the coresponding case_ids and valences.
     The rows of these lists are sorted in order of the dates of the
@@ -278,7 +282,7 @@ def construct_sparse_opinion_matrix(cases_df, opinion_data_dir,
         sparse_feature_matrix.
       valences: A list of valences as ints, with the unknown valences (0) 
         replaced with the neutral valence (2).
-    '''
+    """
     start_time = time.time()
 
     case_ids_df = cases_df['caseid']
@@ -308,15 +312,59 @@ def construct_sparse_opinion_matrix(cases_df, opinion_data_dir,
     return sparse_feature_matrix, case_ids, valences
 
 
-# TODO pull in the target variable, and write that and sparse matrix to files using the svmlight format
-# instructions:
-# http://scikit-learn.org/stable/modules/feature_selection.html#univariate-feature-selection
-# http://scikit-learn.org/stable/datasets/#datasets-in-svmlight-libsvm-format
-# http://www.reddit.com/r/MachineLearning/comments/l9j0e/ask_rml_i_am_extracting_ngrams_from_my_dataset/c2qzx42
-def construct_and_write_sparse_opinion_matrix(case_data_dir, opinion_data_dir):
-    sparse_feature_matrix, ordered_case_ids = construct_sparse_opinion_matrix(case_data_dir, opinion_data_dir)
-    # TODO
-    # sklearn.datasets.dump_svmlight_file
+def load_data(matrix_data_filename,
+              case_ids_filename,
+              cases_df, 
+              opinion_data_dir,
+              num_opinion_shards=TOTAL_NUM_SHARDS,
+              min_required_count=100,
+              tfidf=True):
+    """
+    Looks to see if the file containing the feature matrix and target labels 
+    exists, along with the file containing their corresponding case IDs. If so, 
+    this loads them into memory and returns them. Otherwise, it calls
+    construct_sparse_opinion_matrix to construct the them. Once they have been 
+    constructed, it saves them to disk and returns them.
+
+    Args:
+      matrix_data_filename: The svmlight file containing the features and target
+        variables.
+      case_ids_filename: TODO
+      case_df: A dataframe containing the case variables. Must include caseid, 
+        year, month, day, and direct1.
+      opinion_data_dir: The directory where the opinion n-gram shard files
+        reside.
+      num_opinion_shards: The number of opinion shard files to read in. Defaults
+        to TOTAL_NUM_SHARDS.
+      min_required_count: The minimum number of of times an n-gram must appear
+        throughout all documents in order to be included in the data.
+      tfidf: Boolean. If set, the returned feature matrix has been normalized
+        using TF-IDF.
+
+    Returns:
+      sparse_feature_matrix: A scipy.sparse.csr_matrix with n-gram counts.
+      ordered_case_ids: A list of case ID strings. The index of each case ID
+        corresponds to the index of corresponding row of n-grams in
+        sparse_feature_matrix.
+      valences: A list of valences as ints, with the unknown valences (0) 
+        replaced with the neutral valence (2).
+    """
+    if os.path.isfile(matrix_data_filename) and os.path.isfile(case_ids_filename):
+        print 'Loading data from', matrix_data_filename, 'and', case_ids_filename
+        with open(matrix_data_filename, 'rb') as f:
+            sparse_feature_matrix, valences = sklearn.datasets.load_svmlight_file(f)
+        with open(case_ids_filename, 'rb') as f:
+            case_ids = pickle.load(f)
+    else:
+        print 'Constructing data from scratch...'
+        sparse_feature_matrix, case_ids, valences = construct_sparse_opinion_matrix(
+            cases_df, opinion_data_dir, num_opinion_shards=num_opinion_shards,
+            min_required_count=min_required_count, tfidf=tfidf)
+        # Save results to disk
+        sklearn.datasets.dump_svmlight_file(sparse_feature_matrix, valences, matrix_data_filename)
+        with open(case_ids_filename, 'wb') as f:
+            pickle.dump(case_ids, f)
+    return sparse_feature_matrix, case_ids, valences
 
 
 if __name__ == '__main__':
@@ -325,7 +373,9 @@ if __name__ == '__main__':
     # Read in cases, get te list of case IDs
     case_data_dir = '/Users/pinesol/mlcs_data'
     cases_df = extract_metadata.extract_metadata(case_data_dir+'/'+CASE_DATA_FILENAME)
-    num_shards = 10 #1340
-    construct_sparse_opinion_matrix(cases_df, 
-                                    '/Users/pinesol/mlcs_data/docvec_text',
-                                    num_opinion_shards=num_shards)
+    num_shards = 1340
+    load_data('/tmp/feature_matrix.svmlight',
+              '/tmp/case_ids.p',
+              cases_df, 
+              '/Users/pinesol/mlcs_data/docvec_text',
+              num_opinion_shards=num_shards)
