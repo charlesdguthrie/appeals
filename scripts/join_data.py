@@ -371,20 +371,21 @@ if __name__ == '__main__':
 #    print_opinion_data_stats('/Users/pinesol/mlcs_data/', 
 #                             '/Users/pinesol/mlcs_data/docvec_text')
     # Read in cases, get te list of case IDs
-    case_data_dir = '/Users/pinesol/mlcs_data'
-    cases_df = extract_metadata.extract_metadata(case_data_dir+'/'+CASE_DATA_FILENAME)
-    num_shards = 1340
-    load_data('/tmp/feature_matrix.svmlight',
-              '/tmp/case_ids.p',
-              cases_df, 
-              '/Users/pinesol/mlcs_data/docvec_text',
-              num_opinion_shards=num_shards)
-
-    # case_data_dir = '../data'
+    # case_data_dir = '/Users/pinesol/mlcs_data'
     # cases_df = extract_metadata.extract_metadata(case_data_dir+'/'+CASE_DATA_FILENAME)
     # num_shards = 1340
-    # load_data(case_data_dir+'/feature_matrix.svmlight',
-    #           case_data_dir+'/case_ids.p',
+    # load_data('/tmp/feature_matrix.svmlight',
+    #           '/tmp/case_ids.p',
     #           cases_df, 
-    #           case_data_dir+'/docvec_text',
+    #           '/Users/pinesol/mlcs_data/docvec_text',
     #           num_opinion_shards=num_shards)
+
+    case_data_dir = '../data'
+    cases_df = extract_metadata.extract_metadata(case_data_dir+'/'+CASE_DATA_FILENAME)
+    num_shards = 1340
+    load_data(case_data_dir+'/feature_matrix_100.svmlight',
+              case_data_dir+'/case_ids.p',
+              cases_df, 
+              case_data_dir+'/docvec_text',
+              num_opinion_shards=num_shards,
+              min_required_count=100)

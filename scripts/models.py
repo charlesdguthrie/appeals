@@ -11,7 +11,6 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix
 from sklearn.grid_search import GridSearchCV
 
-#TODO: put this in evaluate_models.py
 def train_test_split(X,y, ordered_case_ids,pct_train):
     train_rows = int(pct_train*len(y))
     y_train = np.array(y[:train_rows])
@@ -22,7 +21,27 @@ def train_test_split(X,y, ordered_case_ids,pct_train):
     case_ids_test = ordered_case_ids[train_rows:]
     return X_train,y_train,case_ids_train,X_test,y_test,case_ids_test
 
-#TODO: create a script to limit the number of rows used
+def subsample(X,y,case_ids, sample_pct):
+    '''
+    Take a random sub-sample of the rows in your data set.  NOTE: to keep it predictable, this is seeded.
+    Args:
+        X: feature matrix
+        y: label array
+        case_ids: list of case ids
+        sample_pct: float between 0 and 1, determines what fraction of the data you want to keep. 
+        
+    Returns X,y, and case_ids, but filtered down to a random sample
+    '''
+    case_ids2 = np.array(case_ids)
+    assert X.shape[0]==len(y), "X and y are not the same length"
+    assert len(case_ids2)==len(y), "case_ids and y are not the same length"
+    sample_size = int(sample_pct*len(y))
+    np.random.seed(10)
+    
+    #Get random sub-sample of row indexes
+    sample_indexes = sorted(np.random.choice(range(len(y)), size=sample_size,replace=False))
+    return X[sample_indexes],y[sample_indexes],list(case_ids2[sample_indexes])
+
 
 #TODO: run one model with a bunch of options.  
 #   options include: regularization, scoring, words to throw out, rows of data
@@ -30,7 +49,8 @@ def train_test_split(X,y, ordered_case_ids,pct_train):
 #   what if I turn on TF-IDF
 #TODO: run all the models with those options
 
-def optimizeSVM(X_train, y_train, reg_min_log10=-2, reg_max_log10=2, regularization_type='l1'):
+def optimizeSVM(X_train, y_train, 
+    scoring='f1_weighted',reg_min_log10=-2, reg_max_log10=2, regularization_type='l1'):
     '''
     Creates an SVM classifier trained on the given data with an optimized C parameter.
     Args:
@@ -38,6 +58,7 @@ def optimizeSVM(X_train, y_train, reg_min_log10=-2, reg_max_log10=2, regularizat
       y_train: A dataframe on which to evaluate the training data
       reg_min_log10: log base 10 of the low end of the regularization parameter range.  -2 means 10^-2
       reg_max_log10: log base 10 of the high end of the regularization parameter range.  2 means 10^2
+      scoring: 'f1_weighted',
     Returns:
       A fitted SVM classifier.
     '''
@@ -46,7 +67,7 @@ def optimizeSVM(X_train, y_train, reg_min_log10=-2, reg_max_log10=2, regularizat
     # consider broadening the param_grid to include different SVM kernels and degrees.  See:
     # http://stackoverflow.com/questions/12632992/gridsearch-for-an-estimator-inside-a-onevsrestclassifier
     param_grid = {'C': [10**i for i in range(-reg_min_log10,reg_max_log10)] + [1e30]}
-    model_tuning = GridSearchCV(model_to_set, scoring='f1_weighted',param_grid=param_grid)
+    model_tuning = GridSearchCV(model_to_set, scoring=scoring,param_grid=param_grid)
     
     model_tuning.fit(X_train, y_train)
     print 'best C param for SVM classifier:', model_tuning.best_params_['C']
@@ -54,7 +75,8 @@ def optimizeSVM(X_train, y_train, reg_min_log10=-2, reg_max_log10=2, regularizat
         
     return model_tuning.best_estimator_
 
-def optimizeLogistic(X_train, y_train, reg_min_log10=-2, reg_max_log10=2,regularization_type='l1'):
+def optimizeLogistic(X_train, y_train, 
+    scoring='f1_weighted',reg_min_log10=-2, reg_max_log10=2,regularization_type='l1'):
     '''
     Creates a logistic classifier trained on the given data with an optimized C parameter.
     Args:
@@ -62,7 +84,7 @@ def optimizeLogistic(X_train, y_train, reg_min_log10=-2, reg_max_log10=2,regular
       y_train: A dataframe on which to evaluate the training data
       reg_min_log10: log base 10 of the low end of the regularization parameter range.  -2 means 10^-2
       reg_max_log10: log base 10 of the high end of the regularization parameter range.  2 means 10^2
-      TODO: scoring
+      scoring: 'f1_weighted', 
     Returns:
       A fitted logistic classifier.
     '''
@@ -70,7 +92,7 @@ def optimizeLogistic(X_train, y_train, reg_min_log10=-2, reg_max_log10=2,regular
     model_to_set = LogisticRegression(penalty=regularization_type)
     param_grid = {'C': [10**i for i in range(-reg_min_log10,reg_max_log10)] + [1e30]}
     model_tuning = GridSearchCV(model_to_set, param_grid=param_grid,
-                             scoring='f1_weighted')
+                             scoring=scoring)
     
     model_tuning.fit(X_train, y_train)
     print 'best C param for LR classifier:', model_tuning.best_params_['C']
@@ -92,8 +114,7 @@ class MajorityClassifier:
     def predict(self,X_test):
         return [self.majority] * X_test.shape[0]
 
-#TODO: move to evaluate_models.py
-def evaluate_accuracy(y_true,y_pred):
+def evaluate_accuracy(y_pred,y_true):
     '''
     Prints out confusion matrix and returns percent accuracy
 
@@ -122,33 +143,46 @@ def evaluate_accuracy(y_true,y_pred):
     
     return (np.diagonal(cm).sum())*1.0/len(y_true)
 
+def train_and_score_model(X,y,case_ids,model,
+    subsample_pct=1.0, train_pct=0.75, reg_low=-3,reg_high=3, scoring='f1_weighted'):
+    '''
+    Train and score a model
+    Args:
+        X,y,case_ids - your data.  X is a matrix, y is an array, case_ids is a list
+        model: string.  So far either 'baseline','logistic',or 'svm'
+        subsample_pct: float between 0 and 1.  Fraction of your data rows to use.
+        train_pct: float between 0 and 1.  Fraction of your subsample to use as training.
+        reg_low, reg_high: integers.  The low and high of your grid search for regularization parameter.
+        scoring: scoring method
 
-def main(model,reg_low=0,reg_high=1):
+    Returns:
+        Model score
 
-    print "model: ",model
-    reg_low = int(reg_low)
-    reg_high = int(reg_high)
+    Prints out: Model score and confusion matrix
+    '''
+
+
     start_time = time.time()
 
-    print 'loading data...'
-    CASE_DATA_FILENAME = 'merged_caselevel_data.csv'
-    case_data_dir = '../data'
-    cases_df = extract_metadata.extract_metadata(case_data_dir+'/'+CASE_DATA_FILENAME)
-    num_shards = 1340
-    X,case_ids,y = jd.load_data('../data/feature_matrix.svmlight',
-              '../data/case_ids.p',
-              cases_df, 
-              '../data/docvec_text',
-              num_opinion_shards=num_shards)
+    print 'Sampling data down to %i percent...' % (subsample_pct*100)
+    if subsample_pct<=1.0 and subsample_pct>0:
+        if subsample_pct<1.0:
+            X,y,case_ids = subsample(X,y,case_ids,subsample_pct)
+    else:
+        print "Subsample percent must be between 0 and 1"
+        return
 
     print 'splitting...'
     X_train,y_train,case_ids_train,X_test,y_test,case_ids_test = train_test_split(X,y,case_ids,0.75)
     
-    print 'fitting model...'
+    reg_low = int(reg_low)
+    reg_high = int(reg_high)
+
+    print 'fitting chosen model: %s...' % model
     if model=='svm':
-        fitted_model = optimizeSVM(X_train,y_train,reg_low,reg_high)
+        fitted_model = optimizeSVM(X_train,y_train,scoring,reg_low,reg_high)
     elif model=='logistic':
-        fitted_model = optimizeLogistic(X_train,y_train,reg_low,reg_high)
+        fitted_model = optimizeLogistic(X_train,y_train,scoring,reg_low,reg_high)
     elif model=='baseline':
         fitted_model = MajorityClassifier()
         fitted_model.fit(X_train,y_train)
@@ -157,9 +191,31 @@ def main(model,reg_low=0,reg_high=1):
         return
 
     print 'evaluating model...'
-    fitted_model.score(X_test,y_test)
-    evaluate_accuracy(fitted_model.predict(X_test),y_test)
+    #fitted_model.score(X_test,y_test)
     print 'total time:', time.time() - start_time
 
+    score = evaluate_accuracy(fitted_model.predict(X_test),y_test)
+    print "Score = ",score
+    return score
+    print ""
+
+def main():
+
+    print 'loading data...'
+    CASE_DATA_FILENAME = 'merged_caselevel_data.csv'
+    case_data_dir = '../data'
+    cases_df = extract_metadata.extract_metadata(case_data_dir+'/'+CASE_DATA_FILENAME)
+    num_shards = 1340
+    X,case_ids,y = jd.load_data('../data/feature_matrix_100.svmlight',
+              '../data/case_ids.p',
+              cases_df, 
+              '../data/docvec_text',
+              num_opinion_shards=num_shards)
+
+    print 'training and scoring models...'
+    train_and_score_model(X,y,case_ids,'baseline',subsample_pct=1)
+    train_and_score_model(X,y,case_ids,'logistic',subsample_pct=0.5)
+    train_and_score_model(X,y,case_ids,'svm',subsample_pct=0.1)
+
 if __name__ == '__main__':
-    main(sys.argv[1],sys.argv[2],sys.argv[3])
+    main()
