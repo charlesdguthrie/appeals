@@ -141,6 +141,7 @@ def filter_infrequent_ngrams(rows_ngram_counts, case_ids, min_required_count,
         with open(filename, 'wb') as f:
             pickle.dump(total_ngram_counts, f)
 
+    print 'Filtering n-grams down to those with a total count of at least', min_required_count
     ngrams_to_keep = set([])
     for ngram_id, count in total_ngram_counts.iteritems():
         if count >= min_required_count:
@@ -180,6 +181,7 @@ def parse_opinion_shards(case_ids, opinion_data_dir, num_opinion_shards):
         corresponds to the index of corresponding row of n-grams in
         sparse_feature_matrix.
     """
+    print 'Parsing opinion shard files'
     # Extract only the n-grams with the given case IDs
     case_id_opinion_lines = extract_docvec_lines(case_ids, opinion_data_dir, 
                                                  num_opinion_shards)
@@ -408,17 +410,19 @@ if __name__ == '__main__':
     #           num_opinion_shards=num_shards,
     #           min_required_count=100)
 
-    case_data_dir = '/Users/pinesol/mlcs_data'
-    cases_df = extract_metadata.extract_metadata(case_data_dir+'/'+CASE_DATA_FILENAME)
-    num_shards = 1340
-    min_required_count = 150
-    feature_matrix_file = '/tmp/feature_matrix.svmlight.shards.%d.mincount.%d' % (
-        min_required_count, min_required_count)
-    case_ids_file = '/tmp/case_ids.shards.p.%d.mincount.%d' % (min_required_count,
-                                                             min_required_count)
+    input_data_dir = '/Users/pinesol/mlcs_data'
+    output_data_dir = '/tmp'
+    cases_df = extract_metadata.extract_metadata(input_data_dir+'/'+CASE_DATA_FILENAME)
+    opinion_data_dir = input_data_dir + '/docvec_text'
+    num_shards = 10 #1340
+    min_required_count = 2 #150
+    feature_matrix_file = '%s/feature_matrix.svmlight.shards.%d.mincount.%d' % (
+        output_data_dir, min_required_count, min_required_count)
+    case_ids_file = '%s/case_ids.shards.p.%d.mincount.%d' % (
+        output_data_dir, min_required_count, min_required_count)
     load_data(feature_matrix_file, 
               case_ids_file,
               cases_df, 
-              '/Users/pinesol/mlcs_data/docvec_text',
+              opinion_data_dir,
               num_opinion_shards=num_shards,
               min_required_count=min_required_count)
