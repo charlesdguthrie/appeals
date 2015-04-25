@@ -14,11 +14,17 @@ import sklearn.feature_extraction
 import sys
 import time
 
+INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
+OUTPUT_DATA_DIR = '/tmp'
 CASE_DATA_FILENAME = 'merged_caselevel_data.csv'
 SHARD_FILE_PREFIX = 'part-'
 # NOTE: change this to control the number of shard files to read. Max number is 1340.
 TOTAL_NUM_SHARDS = 1340
 NGRAM_COUNTS_FILE_PREFIX = 'total_ngram_counts.p.'
+
+NUM_SHARDS = 10 #1340
+MIN_REQUIRED_COUNT = 2 #150
+
 
 # Stats:
 # num unique case_ids:  17178
@@ -117,7 +123,7 @@ def filter_infrequent_ngrams(rows_ngram_counts, case_ids, min_required_count,
     total_ngram_counts = None
     # The ngram counts file is identified by the number of case IDs. This is not
     # unique, but it's close enough for this project.
-    filename = NGRAM_COUNTS_FILE_PREFIX + str(len(case_ids))
+    filename = INPUT_DATA_DIR + '/' + NGRAM_COUNTS_FILE_PREFIX + str(len(case_ids))
     file_exists = os.path.isfile(filename)
     if load_from_file:
         if file_exists:
@@ -142,24 +148,30 @@ def filter_infrequent_ngrams(rows_ngram_counts, case_ids, min_required_count,
             pickle.dump(total_ngram_counts, f)
 
     print 'Filtering n-grams down to those with a total count of at least', min_required_count
-    ngrams_to_keep = set([])
+    ngrams_to_delete = set([])
     for ngram_id, count in total_ngram_counts.iteritems():
-        if count >= min_required_count:
-            ngrams_to_keep.add(ngram_id)
+        if count < min_required_count:
+            ngrams_to_delete.add(ngram_id)
 
-    # TODO This is really slow...
-    filtered_rows_ngram_counts = []
-    filtered_case_ids = []
+    row_indices_to_delete = []
     for i, ngram_counts in enumerate(rows_ngram_counts):
-        filtered_ngram_counts = {}
-        for ngram_id, count in ngram_counts.iteritems():
-            if ngram_id in ngrams_to_keep:
-                filtered_ngram_counts[ngram_id] = count
-        if filtered_ngram_counts:
-            filtered_rows_ngram_counts.append(filtered_ngram_counts)
-            filtered_case_ids.append(case_ids[i])
+        ngram_ids = ngram_counts.keys()
+        num_ngrams_deleted = 0
+        for ngram_id in ngram_ids:
+            if ngram_id in ngrams_to_delete:
+                del ngram_counts[ngram_id]
+                num_ngrams_deleted += 1
+        if len(ngram_ids) == num_ngrams_deleted:
+            row_indices_to_delete.append(i)
+    # The rows and their corresponding and case_ids that had all their ngrams
+    # deleted should be removed entirely.
+    # NOTE: deleting indices in reverse order is necessary.
+    for i in sorted(row_indices_to_delete, reverse=True):
+        del rows_ngram_counts[i]
+        del case_ids[i]
 
-    return filtered_rows_ngram_counts, filtered_case_ids
+    assert len(rows_ngram_counts) == len(case_ids)
+    return rows_ngram_counts, case_ids
 
 
 def parse_opinion_shards(case_ids, opinion_data_dir, num_opinion_shards):
@@ -399,30 +411,15 @@ def load_data(matrix_data_filename,
 
 
 if __name__ == '__main__':
-
-    # case_data_dir = '../data'
-    # cases_df = extract_metadata.extract_metadata(case_data_dir+'/'+CASE_DATA_FILENAME)
-    # num_shards = 1340
-    # load_data(case_data_dir+'/feature_matrix_100.svmlight',
-    #           case_data_dir+'/case_ids.p',
-    #           cases_df, 
-    #           case_data_dir+'/docvec_text',
-    #           num_opinion_shards=num_shards,
-    #           min_required_count=100)
-
-    input_data_dir = '/Users/pinesol/mlcs_data'
-    output_data_dir = '/tmp'
-    cases_df = extract_metadata.extract_metadata(input_data_dir+'/'+CASE_DATA_FILENAME)
-    opinion_data_dir = input_data_dir + '/docvec_text'
-    num_shards = 10 #1340
-    min_required_count = 2 #150
+    cases_df = extract_metadata.extract_metadata(INPUT_DATA_DIR+'/'+CASE_DATA_FILENAME)
+    opinion_data_dir = INPUT_DATA_DIR + '/docvec_text'
     feature_matrix_file = '%s/feature_matrix.svmlight.shards.%d.mincount.%d' % (
-        output_data_dir, min_required_count, min_required_count)
+        OUTPUT_DATA_DIR, NUM_SHARDS, MIN_REQUIRED_COUNT)
     case_ids_file = '%s/case_ids.shards.p.%d.mincount.%d' % (
-        output_data_dir, min_required_count, min_required_count)
+        OUTPUT_DATA_DIR, NUM_SHARDS, MIN_REQUIRED_COUNT)
     load_data(feature_matrix_file, 
               case_ids_file,
               cases_df, 
               opinion_data_dir,
-              num_opinion_shards=num_shards,
-              min_required_count=min_required_count)
+              num_opinion_shards=NUM_SHARDS,
+              min_required_count=MIN_REQUIRED_COUNT)
