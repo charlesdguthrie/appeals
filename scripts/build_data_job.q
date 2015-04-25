@@ -4,7 +4,7 @@
 
 #PBS -l nodes=1:ppn=1
 #PBS -l walltime=1:00:00
-#PBS -l mem=8GB
+#PBS -l mem=64GB
 #PBS -N build_opinion_data
 #PBS -j oe
 #PBS -M alex.pine@nyu.edu
