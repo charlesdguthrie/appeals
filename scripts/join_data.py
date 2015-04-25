@@ -16,6 +16,7 @@ import time
 
 INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
 OUTPUT_DATA_DIR = '/tmp'
+
 CASE_DATA_FILENAME = 'merged_caselevel_data.csv'
 SHARD_FILE_PREFIX = 'part-'
 # NOTE: change this to control the number of shard files to read. Max number is 1340.
@@ -120,45 +121,33 @@ def filter_infrequent_ngrams(rows_ngram_counts, case_ids, min_required_count,
       filtered_case_ids: The case IDs corresponding to each set of filtered 
         n-grams.
     """
-    total_ngram_counts = None
-    # The ngram counts file is identified by the number of case IDs. This is not
-    # unique, but it's close enough for this project.
+    print 'Computing total n-gram counts...'
+    total_ngram_counts = collections.defaultdict(int)
+    for ngram_counts in rows_ngram_counts:
+        for ngram_id, count in ngram_counts.iteritems():
+            total_ngram_counts[ngram_id] += count
+
+    # TODO saving pickle file to disk in hopes that it can be used for decoding the dict
+    print 'Writing n-gram counts to disk...'
     filename = INPUT_DATA_DIR + '/' + NGRAM_COUNTS_FILE_PREFIX + str(len(case_ids))
-    file_exists = os.path.isfile(filename)
-    if load_from_file:
-        if file_exists:
-            print 'Loading total n-gram counts from', filename
-            with open(filename, 'rb') as f:
-                total_ngram_counts = pickle.load(f)
-            print 'Total n-gram counts loaded'
-        else:
-            print filename, 'not found. Computing ngram counts directly.'
-    
-    if not total_ngram_counts:
-        print 'Computing total n-gram counts...'
-        total_ngram_counts = collections.defaultdict(int)
-        for ngram_counts in rows_ngram_counts:
-            for ngram_id, count in ngram_counts.iteritems():
-                total_ngram_counts[ngram_id] += count
+    with open(filename, 'wb') as f:
+        pickle.dump(total_ngram_counts, f)
 
-    # Save these counts if there is no file for them.
-    if not file_exists:
-        print 'Writing n-gram counts to disk...'
-        with open(filename, 'wb') as f:
-            pickle.dump(total_ngram_counts, f)
-
-    print 'Filtering n-grams down to those with a total count of at least', min_required_count
-    ngrams_to_delete = set([])
+    print 'Filtering n-grams...'
+    ngrams_to_keep = set([])
     for ngram_id, count in total_ngram_counts.iteritems():
-        if count < min_required_count:
-            ngrams_to_delete.add(ngram_id)
+        if count >= min_required_count:
+            ngrams_to_keep.add(ngram_id)
+
+    # TODO a desperate attempt to free up memory
+    del total_ngram_counts
 
     row_indices_to_delete = []
     for i, ngram_counts in enumerate(rows_ngram_counts):
         ngram_ids = ngram_counts.keys()
         num_ngrams_deleted = 0
         for ngram_id in ngram_ids:
-            if ngram_id in ngrams_to_delete:
+            if ngram_id not in ngrams_to_keep:
                 del ngram_counts[ngram_id]
                 num_ngrams_deleted += 1
         if len(ngram_ids) == num_ngrams_deleted:
@@ -411,6 +400,9 @@ def load_data(matrix_data_filename,
 
 
 if __name__ == '__main__':
+    print 'Data parameter:'
+    print '  Number of opinion shards', NUM_SHARDS
+    print '  Minimum required count', MIN_REQUIRED_COUNT
     cases_df = extract_metadata.extract_metadata(INPUT_DATA_DIR+'/'+CASE_DATA_FILENAME)
     opinion_data_dir = INPUT_DATA_DIR + '/docvec_text'
     feature_matrix_file = '%s/feature_matrix.svmlight.shards.%d.mincount.%d' % (
