@@ -18,6 +18,7 @@ CASE_DATA_FILENAME = 'merged_caselevel_data.csv'
 SHARD_FILE_PREFIX = 'part-'
 # NOTE: change this to control the number of shard files to read. Max number is 1340.
 TOTAL_NUM_SHARDS = 1340
+NGRAM_COUNTS_FILE_PREFIX = 'total_ngram_counts.p.'
 
 # Stats:
 # num unique case_ids:  17178
@@ -90,7 +91,8 @@ def print_opinion_data_stats(case_data_dir, opinion_data_dir):
 
 
 # TODO Do experiments to find the best value for this.
-def filter_infrequent_ngrams(rows_ngram_counts, case_ids, min_required_count):
+def filter_infrequent_ngrams(rows_ngram_counts, case_ids, min_required_count,
+                             load_from_file=True):
     """
     Counts the number of times each n-gram occurs throughout the corpus, and 
     filters out the low-occuring ones.
@@ -100,6 +102,10 @@ def filter_infrequent_ngrams(rows_ngram_counts, case_ids, min_required_count):
       case_ids: The case IDs corresponding to each set of n-grams.
       min_required_count: Positive integer. The minimum number of times an
         n-gram must occur in total in order to be left in.
+      load_from_file: If true, the function will try to load the n-gram counts 
+        for the given case IDs from a pre-computed file. In this case, the 
+        row_ngram_counts dict will be ignored. If false, the total counts will
+        be computed directly and saved to disk.
 
     Returns:
       filtered_rows_ngram_counts: The list of n-gram counts for each case. The
@@ -108,10 +114,33 @@ def filter_infrequent_ngrams(rows_ngram_counts, case_ids, min_required_count):
       filtered_case_ids: The case IDs corresponding to each set of filtered 
         n-grams.
     """
-    total_ngram_counts = collections.defaultdict(int)
-    for ngram_counts in rows_ngram_counts:
-        for ngram_id, count in ngram_counts.iteritems():
-            total_ngram_counts[ngram_id] += count
+    total_ngram_counts = None
+    # The ngram counts file is identified by the number of case IDs. This is not
+    # unique, but it's close enough for this project.
+    filename = NGRAM_COUNTS_FILE_PREFIX + str(len(case_ids))
+    file_exists = os.path.isfile(filename)
+    if load_from_file:
+        if file_exists:
+            print 'Loading total n-gram counts from', filename
+            with open(filename, 'rb') as f:
+                total_ngram_counts = pickle.load(f)
+            print 'Total n-gram counts loaded'
+        else:
+            print filename, 'not found. Computing ngram counts directly.'
+    
+    if not total_ngram_counts:
+        print 'Computing total n-gram counts...'
+        total_ngram_counts = collections.defaultdict(int)
+        for ngram_counts in rows_ngram_counts:
+            for ngram_id, count in ngram_counts.iteritems():
+                total_ngram_counts[ngram_id] += count
+
+    # Save these counts if there is no file for them.
+    if not file_exists:
+        print 'Writing n-gram counts to disk...'
+        with open(filename, 'wb') as f:
+            pickle.dump(total_ngram_counts, f)
+
     ngrams_to_keep = set([])
     for ngram_id, count in total_ngram_counts.iteritems():
         if count >= min_required_count:
@@ -280,8 +309,6 @@ def construct_sparse_opinion_matrix(cases_df, opinion_data_dir,
       valences: A list of valences as ints, with the unknown valences (0) 
         replaced with the neutral valence (2).
     """
-    start_time = time.time()
-
     case_ids_df = cases_df['caseid']
 
     rows_ngram_counts, case_ids = parse_opinion_shards(case_ids_df, opinion_data_dir, num_opinion_shards)
@@ -291,6 +318,7 @@ def construct_sparse_opinion_matrix(cases_df, opinion_data_dir,
 
     valences = create_valences(cases_df, case_ids)
 
+    print 'Building sparse matrix'
     # Make sure the matrics created by this vectorizer are sparse.
     # set sort=False so that the ordering of the rows by date is preserved.
     dict_vectorizer = sklearn.feature_extraction.DictVectorizer(sparse=True, sort=False)
@@ -305,7 +333,6 @@ def construct_sparse_opinion_matrix(cases_df, opinion_data_dir,
 
     print 'shape: ', sparse_feature_matrix.get_shape()
     print 'number of cases', len(case_ids)
-    print 'total time:', time.time() - start_time
 
     return sparse_feature_matrix, case_ids, valences
 
@@ -347,6 +374,8 @@ def load_data(matrix_data_filename,
       valences: A list of valences as ints, with the unknown valences (0) 
         replaced with the neutral valence (2).
     """
+    start_time = time.time()
+
     if os.path.isfile(matrix_data_filename) and os.path.isfile(case_ids_filename):
         print 'Loading data from', matrix_data_filename, 'and', case_ids_filename
         with open(matrix_data_filename, 'rb') as f:
@@ -359,10 +388,11 @@ def load_data(matrix_data_filename,
         sparse_feature_matrix, case_ids, valences = construct_sparse_opinion_matrix(
             cases_df, opinion_data_dir, num_opinion_shards=num_opinion_shards,
             min_required_count=min_required_count, tfidf=tfidf)
-        print 'Writing results to disk'
+        print 'Writing input data to disk'
         sklearn.datasets.dump_svmlight_file(sparse_feature_matrix, valences, matrix_data_filename)
         with open(case_ids_filename, 'wb') as f:
             pickle.dump(case_ids, f)
+    print 'total time:', time.time() - start_time
     return sparse_feature_matrix, case_ids, valences
 
 
@@ -381,9 +411,13 @@ if __name__ == '__main__':
     case_data_dir = '/Users/pinesol/mlcs_data'
     cases_df = extract_metadata.extract_metadata(case_data_dir+'/'+CASE_DATA_FILENAME)
     num_shards = 1340
-    min_required_count = 10
-    load_data('/tmp/no_filter_feature_matrix.svmlight',
-              '/tmp/no_filter_case_ids.p',
+    min_required_count = 150
+    feature_matrix_file = '/tmp/feature_matrix.svmlight.shards.%d.mincount.%d' % (
+        min_required_count, min_required_count)
+    case_ids_file = '/tmp/case_ids.shards.p.%d.mincount.%d' % (min_required_count,
+                                                             min_required_count)
+    load_data(feature_matrix_file, 
+              case_ids_file,
               cases_df, 
               '/Users/pinesol/mlcs_data/docvec_text',
               num_opinion_shards=num_shards,
