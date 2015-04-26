@@ -1,3 +1,4 @@
+import argparse
 import pandas as pd
 import numpy as np
 import pickler
@@ -114,6 +115,8 @@ class MajorityClassifier:
     def predict(self,X_test):
         return [self.majority] * X_test.shape[0]
 
+# TODO P2 comparse this function with the results of the sklearn accuracy_score function
+# http://scikit-learn.org/stable/modules/model_evaluation.html#accuracy-score
 def evaluate_accuracy(y_pred,y_true):
     '''
     Prints out confusion matrix and returns percent accuracy
@@ -125,7 +128,7 @@ def evaluate_accuracy(y_pred,y_true):
     Returns:
         percent of cases where y_pred == y_true
     '''
-    cm = confusion_matrix(y_true,y_pred)
+    cm = confusion_matrix(y_true, y_pred)
     height = cm.shape[0]
     width = cm.shape[1]
     uniques = np.unique(np.array([y_true,y_pred]))
@@ -160,8 +163,6 @@ def train_and_score_model(X,y,case_ids,model,
 
     Prints out: Model score and confusion matrix
     '''
-
-
     start_time = time.time()
 
     print 'Sampling data down to %i percent...' % (subsample_pct*100)
@@ -173,16 +174,16 @@ def train_and_score_model(X,y,case_ids,model,
         return
 
     print 'splitting...'
-    X_train,y_train,case_ids_train,X_test,y_test,case_ids_test = train_test_split(X,y,case_ids,0.75)
+    X_train, y_train, case_ids_train, X_test, y_test, case_ids_test = train_test_split(X, y, case_ids, train_pct)
     
     reg_low = int(reg_low)
     reg_high = int(reg_high)
 
     print 'fitting chosen model: %s...' % model
     if model=='svm':
-        fitted_model = optimizeSVM(X_train,y_train,scoring,reg_low,reg_high)
+        fitted_model = optimizeSVM(X_train, y_train, scoring, reg_low, reg_high)
     elif model=='logistic':
-        fitted_model = optimizeLogistic(X_train,y_train,scoring,reg_low,reg_high)
+        fitted_model = optimizeLogistic(X_train, y_train, scoring, reg_low, reg_high)
     elif model=='baseline':
         fitted_model = MajorityClassifier()
         fitted_model.fit(X_train,y_train)
@@ -194,28 +195,73 @@ def train_and_score_model(X,y,case_ids,model,
     #fitted_model.score(X_test,y_test)
     print 'total time:', time.time() - start_time
 
-    score = evaluate_accuracy(fitted_model.predict(X_test),y_test)
-    print "Score = ",score
-    return score
-    print ""
+    train_accuracy = evaluate_accuracy(fitted_model.predict(X_train),y_train)
+    print "Training Accuracy = ", train_accuracy
+
+    test_accuracy = evaluate_accuracy(fitted_model.predict(X_test),y_test)
+    print "Testing Accuracy = ", test_accuracy
+    return test_accuracy
+
 
 def main():
+    DEFAULT_INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
+    DEFAULT_OUTPUT_DATA_DIR = '/tmp'
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--input_data_dir', default=DEFAULT_INPUT_DATA_DIR)
+    parser.add_argument('--output_data_dir', default=DEFAULT_OUTPUT_DATA_DIR)
+    args = vars(parser.parse_args())
+    input_data_dir = args['input_data_dir']
+    output_data_dir = args['output_data_dir']
+
+    NUM_SHARDS = 200 #1340
+    MIN_REQUIRED_COUNT = 2 #150
+
+    CASE_DATA_FILENAME = 'merged_caselevel_data.csv'
+    cases_df = extract_metadata.extract_metadata(input_data_dir+'/'+CASE_DATA_FILENAME)
+    opinion_data_dir = input_data_dir + '/docvec_text'
+    feature_matrix_file = '%s/feature_matrix.svmlight.shards.%d.mincount.%d' % (
+        output_data_dir, NUM_SHARDS, MIN_REQUIRED_COUNT)
+    case_ids_file = '%s/case_ids.shards.p.%d.mincount.%d' % (
+        output_data_dir, NUM_SHARDS, MIN_REQUIRED_COUNT)
+
 
     print 'loading data...'
-    CASE_DATA_FILENAME = 'merged_caselevel_data.csv'
-    case_data_dir = '../data'
-    cases_df = extract_metadata.extract_metadata(case_data_dir+'/'+CASE_DATA_FILENAME)
-    num_shards = 1340
-    X,case_ids,y = jd.load_data('../data/feature_matrix_100.svmlight',
-              '../data/case_ids.p',
-              cases_df, 
-              '../data/docvec_text',
-              num_opinion_shards=num_shards)
+
+    X, case_ids, y = jd.load_data(feature_matrix_file, 
+                                  case_ids_file,
+                                  cases_df, 
+                                  opinion_data_dir,
+                                  num_opinion_shards=NUM_SHARDS,
+                                  min_required_count=MIN_REQUIRED_COUNT)
 
     print 'training and scoring models...'
     train_and_score_model(X,y,case_ids,'baseline',subsample_pct=1)
-    train_and_score_model(X,y,case_ids,'logistic',subsample_pct=0.5)
-    train_and_score_model(X,y,case_ids,'svm',subsample_pct=0.1)
+    train_and_score_model(X,y,case_ids,'logistic',subsample_pct=1)
+    train_and_score_model(X,y,case_ids,'svm',subsample_pct=0.2) # TODO this is bad...
+
+    # TODO P0 Maybe you can parallelize the grid search?
+    # http://scikit-learn.org/stable/modules/grid_search.html#parallelism
+
+    # TODO P0 SVM just doesn't train! even on small data!
+
+    # TODO P0 try model-specific cross validation
+    # http://scikit-learn.org/stable/modules/grid_search.html#model-specific-cross-validation
+
+    # TODO P1 print the data split percentages
+    # TODO P1 each model should print out its interesting info to a dict or an object, which can then be printed all at once
+
+    # TODO P1 why are we using f1_weighted? We need to cite a justafication
+    # We should be able to justify f1 weighted using this doc:
+    # http://scikit-learn.org/stable/modules/model_evaluation.html#from-binary-to-multiclass-and-multilabel
+
+    # TODO P2 A Second base classifier
+    # There should be a one that guesses randomly, but in proportion to the different classes
+
+    # TODO P2 Visualize the confustion matrix
+    # http://scikit-learn.org/stable/auto_examples/model_selection/plot_confusion_matrix.html#example-model-selection-plot-confusion-matrix-py
+
+
 
 if __name__ == '__main__':
     main()
