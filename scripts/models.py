@@ -184,15 +184,17 @@ def train_and_score_model(X, y, case_ids, model,
 
     print 'total time:', time.time() - start_time
 
-    print 'Data parameter:'
+    print 'Feature Matrix Info:'
     print '  Number of cases', X.shape[0]
     print '  Number of features', X.shape[1]
     print 'Training percentage', train_pct
     print 'Scoring used:', scoring
     print 'Regularization type:', regularization_type
-    print 'Parameter Grid:', param_grid
+    if reg_low and reg_high:
+        print 'Regularization bounded between 10^(%d) and 10^(%d):' % (
+            reg_low, reg_high)
 
-    print 'evaluating model...'
+    print 'Evaluating model...'
     train_accuracy = evaluate_accuracy(fitted_model.predict(X_train), y_train)
     print "Training Accuracy = ", train_accuracy
 
@@ -212,8 +214,9 @@ def main():
     input_data_dir = args['input_data_dir']
     output_data_dir = args['output_data_dir']
 
-    NUM_SHARDS = 300 #1340
-    MIN_REQUIRED_COUNT = 20 #150
+    NUM_SHARDS = 100 #1340
+    MIN_REQUIRED_COUNT = 10 #150
+    USE_TFIDF = True 
 
     CASE_DATA_FILENAME = 'merged_caselevel_data.csv'
     cases_df = extract_metadata.extract_metadata(input_data_dir+'/'+CASE_DATA_FILENAME)
@@ -223,15 +226,13 @@ def main():
     case_ids_file = '%s/case_ids.shards.p.%d.mincount.%d' % (
         output_data_dir, NUM_SHARDS, MIN_REQUIRED_COUNT)
 
-
-    print 'loading data...'
-
     X, case_ids, y = jd.load_data(feature_matrix_file, 
                                   case_ids_file,
                                   cases_df, 
                                   opinion_data_dir,
                                   num_opinion_shards=NUM_SHARDS,
-                                  min_required_count=MIN_REQUIRED_COUNT)
+                                  min_required_count=MIN_REQUIRED_COUNT,
+                                  tfidf=USE_TFIDF)
 
     print 'training and scoring models...'
     train_and_score_model(X, y, case_ids, 'baseline', subsample_pct=1.0, train_pct=0.75, 
@@ -241,10 +242,6 @@ def main():
     train_and_score_model(X, y, case_ids, 'svm', subsample_pct=1.0, train_pct=0.75,
                           reg_low=-2, reg_high=2, scoring='f1_weighted', regularization_type='l1')
 
-
-    # TODO P0 Add Term Frequency Normalization WITHOUT IDF
-    # IDF will be very slow, so leave it out at first
-    # http://scikit-learn.org/stable/modules/generated/sklearn.feature_extraction.text.TfidfTransformer.html
 
     # TODO P0 Implement Naive Bayes
 
@@ -274,10 +271,6 @@ def main():
 
     # TODO P2 Try LogisticRegressionCV, which uses a 'regularization path', so it's faster than grid search
     # http://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegressionCV.html#sklearn.linear_model.LogisticRegressionCV
-
-    # TODO P2 Add Term Frequency Normalization with IDF
-    # IDF will be very slow
-    # http://scikit-learn.org/stable/modules/generated/sklearn.feature_extraction.text.TfidfTransformer.html
 
     # TODO P2 try other model-specific cross validation techniques
     # http://scikit-learn.org/stable/modules/grid_search.html#model-specific-cross-validation

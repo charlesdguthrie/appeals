@@ -23,9 +23,10 @@ SHARD_FILE_PREFIX = 'part-'
 TOTAL_NUM_SHARDS = 1340
 NGRAM_COUNTS_FILE_PREFIX = 'total_ngram_counts.p.'
 
-NUM_SHARDS = 10 #1340
-MIN_REQUIRED_COUNT = 2 #150
-
+# Main Parameters
+NUM_SHARDS = 40 #1340
+MIN_REQUIRED_COUNT = 4 #150
+USE_TFIDF = True
 
 # Stats:
 # num unique case_ids:  17178
@@ -182,7 +183,7 @@ def parse_opinion_shards(case_ids, opinion_data_dir, num_opinion_shards):
         corresponds to the index of corresponding row of n-grams in
         sparse_feature_matrix.
     """
-    print 'Parsing opinion shard files'
+    print 'Parsing opinion shard files...'
     # Extract only the n-grams with the given case IDs
     case_id_opinion_lines = extract_docvec_lines(case_ids, opinion_data_dir, 
                                                  num_opinion_shards)
@@ -257,11 +258,12 @@ def sort_case_lists(cases_df, rows_ngram_counts, case_ids):
     sorted_index_case_id_pairs = sorted(enumerate(case_ids), 
                                         key=lambda tup: case_id_date_map[tup[1]])
 
-    # TODO this is not in place and will be memory intensive
     case_ids = [case_ids[i] for i, caseid in sorted_index_case_id_pairs]
-    rows_ngram_counts = [rows_ngram_counts[i] for i, caseid in sorted_index_case_id_pairs]
+    rows_ngram_counts = [rows_ngram_counts[i] 
+                         for i, caseid in sorted_index_case_id_pairs]
     # testing code
-    sorted_dateints = [case_id_date_map[caseid] for i, caseid in sorted_index_case_id_pairs]
+    sorted_dateints = [case_id_date_map[caseid] 
+                       for i, caseid in sorted_index_case_id_pairs]
     assert sorted_dateints == sorted(sorted_dateints)
 
     return rows_ngram_counts, case_ids
@@ -282,9 +284,9 @@ def create_valences(cases_df, case_ids):
 
 
 def construct_sparse_opinion_matrix(cases_df, opinion_data_dir,
-                                    num_opinion_shards=TOTAL_NUM_SHARDS,
-                                    min_required_count=100,
-                                    tfidf=True):
+                                    num_opinion_shards,
+                                    min_required_count,
+                                    tfidf):
     """
     Builds a CSR sparse matrix containing the n-gram counts from the court
     opinion shard files. Also returns the coresponding case_ids and valences.
@@ -297,8 +299,7 @@ def construct_sparse_opinion_matrix(cases_df, opinion_data_dir,
         year, month, day, and direct1.
       opinion_data_dir: The directory where the opinion n-gram shard files
         reside.
-      num_opinion_shards: The number of opinion shard files to read in. Defaults
-        to TOTAL_NUM_SHARDS.
+      num_opinion_shards: The number of opinion shard files to read in. 
       min_required_count: The minimum number of of times an n-gram must appear
         throughout all documents in order to be included in the data.
       tfidf: Boolean. If set, the returned feature matrix has been normalized
@@ -314,20 +315,25 @@ def construct_sparse_opinion_matrix(cases_df, opinion_data_dir,
     """
     case_ids_df = cases_df['caseid']
 
-    rows_ngram_counts, case_ids = parse_opinion_shards(case_ids_df, opinion_data_dir, num_opinion_shards)
+    rows_ngram_counts, case_ids = parse_opinion_shards(
+        case_ids_df, opinion_data_dir, num_opinion_shards)
     if min_required_count > 1:
-        rows_ngram_counts, case_ids = filter_infrequent_ngrams(rows_ngram_counts, case_ids, min_required_count)
-    rows_ngram_counts, case_ids = sort_case_lists(cases_df, rows_ngram_counts, case_ids)
+        rows_ngram_counts, case_ids = filter_infrequent_ngrams(
+            rows_ngram_counts, case_ids, min_required_count)
+    rows_ngram_counts, case_ids = sort_case_lists(cases_df, rows_ngram_counts, 
+                                                  case_ids)
 
     valences = create_valences(cases_df, case_ids)
 
-    print 'Building sparse matrix'
+    print 'Building sparse matrix...'
     # Make sure the matrics created by this vectorizer are sparse.
     # set sort=False so that the ordering of the rows by date is preserved.
-    dict_vectorizer = sklearn.feature_extraction.DictVectorizer(sparse=True, sort=False)
+    dict_vectorizer = sklearn.feature_extraction.DictVectorizer(
+        sparse=True, sort=False)
     sparse_feature_matrix = dict_vectorizer.fit_transform(rows_ngram_counts)
 
     if tfidf:
+        print 'Running tfidf transformation...'
         transformer = sklearn.feature_extraction.text.TfidfTransformer()
         sparse_feature_matrix = transformer.fit_transform(sparse_feature_matrix)
 
@@ -344,9 +350,9 @@ def load_data(matrix_data_filename,
               case_ids_filename,
               cases_df, 
               opinion_data_dir,
-              num_opinion_shards=TOTAL_NUM_SHARDS,
-              min_required_count=100,
-              tfidf=True):
+              num_opinion_shards,
+              min_required_count,
+              tfidf):
     """
     Looks to see if the file containing the feature matrix and target labels 
     exists, along with the file containing their corresponding case IDs. If so, 
@@ -357,13 +363,13 @@ def load_data(matrix_data_filename,
     Args:
       matrix_data_filename: The svmlight file containing the features and target
         variables.
-      case_ids_filename: TODO
+      case_ids_filename: The name of the pickle file containing the case IDs 
+        list.
       case_df: A dataframe containing the case variables. Must include caseid, 
         year, month, day, and direct1.
       opinion_data_dir: The directory where the opinion n-gram shard files
         reside.
-      num_opinion_shards: The number of opinion shard files to read in. Defaults
-        to TOTAL_NUM_SHARDS.
+      num_opinion_shards: The number of opinion shard files to read in.
       min_required_count: The minimum number of of times an n-gram must appear
         throughout all documents in order to be included in the data.
       tfidf: Boolean. If set, the returned feature matrix has been normalized
@@ -379,39 +385,71 @@ def load_data(matrix_data_filename,
     """
     start_time = time.time()
 
+    print 'Data parameters:'
+    print '  Number of opinion shards:', NUM_SHARDS
+    print '  Minimum required count:', MIN_REQUIRED_COUNT
+    print '  Using TF-IDF:', USE_TFIDF
+
     if os.path.isfile(matrix_data_filename) and os.path.isfile(case_ids_filename):
-        print 'Loading data from', matrix_data_filename, 'and', case_ids_filename
         with open(matrix_data_filename, 'rb') as f:
             sparse_feature_matrix, valences = sklearn.datasets.load_svmlight_file(f)
         with open(case_ids_filename, 'rb') as f:
             case_ids = pickle.load(f)
-        print 'Data Loaded'
+        print 'Data loaded from', matrix_data_filename, 'and', case_ids_filename
     else:
         print 'Constructing data from scratch...'
         sparse_feature_matrix, case_ids, valences = construct_sparse_opinion_matrix(
             cases_df, opinion_data_dir, num_opinion_shards=num_opinion_shards,
             min_required_count=min_required_count, tfidf=tfidf)
         print 'Writing input data to disk'
-        sklearn.datasets.dump_svmlight_file(sparse_feature_matrix, valences, matrix_data_filename)
+        sklearn.datasets.dump_svmlight_file(sparse_feature_matrix, valences, 
+                                            matrix_data_filename)
         with open(case_ids_filename, 'wb') as f:
             pickle.dump(case_ids, f)
-    print 'total time:', time.time() - start_time
+        print 'Feature matrix saved as %s' % matrix_data_filename
+        print 'Case IDs saved as %s' % case_ids_filename
+
+    print 'Total time spent building data:', time.time() - start_time
     return sparse_feature_matrix, case_ids, valences
 
 
-if __name__ == '__main__':
-    print 'Data parameter:'
-    print '  Number of opinion shards', NUM_SHARDS
-    print '  Minimum required count', MIN_REQUIRED_COUNT
-    cases_df = extract_metadata.extract_metadata(INPUT_DATA_DIR+'/'+CASE_DATA_FILENAME)
-    opinion_data_dir = INPUT_DATA_DIR + '/docvec_text'
+def build_filenames_from_params(output_data_dir, num_shards, min_required_count,
+                                tfidf):
+    """
+    Builds filesnames that include the given parameter values in them, for 
+    documentation.
+
+    Args:
+      output_data_dir: The base directory for all output files.
+      num_opinion_shards: The number of opinion shard files to read in.
+      min_required_count: The minimum number of of times an n-gram must appear
+        throughout all documents in order to be included in the data.
+      tfidf: Boolean. If set, the returned feature matrix has been normalized
+        using TF-IDF.
+    Returns:
+      feature_matrix_file: A string to be used as the name of the feauture
+        matrix file.
+      case_ids_file: A string to be used as the name of the case IDs file.
+    """
     feature_matrix_file = '%s/feature_matrix.svmlight.shards.%d.mincount.%d' % (
         OUTPUT_DATA_DIR, NUM_SHARDS, MIN_REQUIRED_COUNT)
     case_ids_file = '%s/case_ids.shards.p.%d.mincount.%d' % (
         OUTPUT_DATA_DIR, NUM_SHARDS, MIN_REQUIRED_COUNT)
+    if tfidf:
+        feature_matrix_file += '.tfidf'
+        case_ids_file += '.tfidf'
+    return feature_matrix_file, case_ids_file
+
+
+if __name__ == '__main__':
+    cases_df = extract_metadata.extract_metadata(INPUT_DATA_DIR+'/'+CASE_DATA_FILENAME)
+    opinion_data_dir = INPUT_DATA_DIR + '/docvec_text'
+    feature_matrix_file, case_ids_file = build_filenames_from_params(
+        OUTPUT_DATA_DIR, NUM_SHARDS, MIN_REQUIRED_COUNT, USE_TFIDF)
     load_data(feature_matrix_file, 
               case_ids_file,
               cases_df, 
               opinion_data_dir,
               num_opinion_shards=NUM_SHARDS,
-              min_required_count=MIN_REQUIRED_COUNT)
+              min_required_count=MIN_REQUIRED_COUNT,
+              tfidf=USE_TFIDF)
