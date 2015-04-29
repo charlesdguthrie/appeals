@@ -1,3 +1,4 @@
+import argparse
 import pandas as pd
 import numpy as np
 import pickler
@@ -8,7 +9,7 @@ import join_data as jd
 
 from sklearn.svm import LinearSVC
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import confusion_matrix
+import sklearn.metrics
 from sklearn.grid_search import GridSearchCV
 
 def train_test_split(X,y, ordered_case_ids,pct_train):
@@ -20,6 +21,7 @@ def train_test_split(X,y, ordered_case_ids,pct_train):
     case_ids_train = ordered_case_ids[:train_rows]
     case_ids_test = ordered_case_ids[train_rows:]
     return X_train,y_train,case_ids_train,X_test,y_test,case_ids_test
+
 
 def subsample(X,y,case_ids, sample_pct):
     '''
@@ -43,14 +45,8 @@ def subsample(X,y,case_ids, sample_pct):
     return X[sample_indexes],y[sample_indexes],list(case_ids2[sample_indexes])
 
 
-#TODO: run one model with a bunch of options.  
-#   options include: regularization, scoring, words to throw out, rows of data
-#   this is a model testing framework
-#   what if I turn on TF-IDF
-#TODO: run all the models with those options
-
 def optimizeSVM(X_train, y_train, 
-    scoring='f1_weighted',reg_min_log10=-2, reg_max_log10=2, regularization_type='l1'):
+                scoring, reg_min_log10, reg_max_log10, regularization_type):
     '''
     Creates an SVM classifier trained on the given data with an optimized C parameter.
     Args:
@@ -66,17 +62,20 @@ def optimizeSVM(X_train, y_train,
     model_to_set = LinearSVC(penalty=regularization_type,random_state=0, dual=False)
     # consider broadening the param_grid to include different SVM kernels and degrees.  See:
     # http://stackoverflow.com/questions/12632992/gridsearch-for-an-estimator-inside-a-onevsrestclassifier
-    param_grid = {'C': [10**i for i in range(-reg_min_log10,reg_max_log10)] + [1e30]}
-    model_tuning = GridSearchCV(model_to_set, scoring=scoring,param_grid=param_grid)
+    param_grid = {'C': [10**i for i in range(reg_min_log10, reg_max_log10 + 1)]}
+    # NOTE: n_jobs=-1 means this will try to run the different folds in parallel
+    model_tuning = GridSearchCV(model_to_set, scoring=scoring, param_grid=param_grid, verbose=1, n_jobs=-1)
     
     model_tuning.fit(X_train, y_train)
+    print 'Fitting Complete!\n'
     print 'best C param for SVM classifier:', model_tuning.best_params_['C']
     print 'best_score: ', model_tuning.best_score_
         
     return model_tuning.best_estimator_
 
+
 def optimizeLogistic(X_train, y_train, 
-    scoring='f1_weighted',reg_min_log10=-2, reg_max_log10=2,regularization_type='l1'):
+                     scoring, reg_min_log10, reg_max_log10, regularization_type):
     '''
     Creates a logistic classifier trained on the given data with an optimized C parameter.
     Args:
@@ -90,16 +89,18 @@ def optimizeLogistic(X_train, y_train,
     '''
     
     model_to_set = LogisticRegression(penalty=regularization_type)
-    param_grid = {'C': [10**i for i in range(-reg_min_log10,reg_max_log10)] + [1e30]}
+    param_grid = {'C': [10**i for i in range(reg_min_log10, reg_max_log10 + 1)]}
     model_tuning = GridSearchCV(model_to_set, param_grid=param_grid,
-                             scoring=scoring)
+                                scoring=scoring)
     
     model_tuning.fit(X_train, y_train)
+    print 'Fitting Complete!\n'
     print 'best C param for LR classifier:', model_tuning.best_params_['C']
     print 'best params: ', model_tuning.best_params_
     print 'best_score: ', model_tuning.best_score_
         
     return model_tuning.best_estimator_
+
 
 class MajorityClassifier:
     def fit(self,X_train,y_train):
@@ -114,18 +115,16 @@ class MajorityClassifier:
     def predict(self,X_test):
         return [self.majority] * X_test.shape[0]
 
-def evaluate_accuracy(y_pred,y_true):
+
+def print_accuracy_info(y_pred, y_true):
     '''
     Prints out confusion matrix and returns percent accuracy
 
     Args:
         y_true: array of y values 
         y_pred: array of predicted y values
-
-    Returns:
-        percent of cases where y_pred == y_true
     '''
-    cm = confusion_matrix(y_true,y_pred)
+    cm = sklearn.metrics.confusion_matrix(y_true, y_pred)
     height = cm.shape[0]
     width = cm.shape[1]
     uniques = np.unique(np.array([y_true,y_pred]))
@@ -140,11 +139,12 @@ def evaluate_accuracy(y_pred,y_true):
         for j in range(len(uniques)):
             row = row + " \t " + str(cm[i][j])
         print "\t " + str(int(u)) + row
-    
-    return (np.diagonal(cm).sum())*1.0/len(y_true)
 
-def train_and_score_model(X,y,case_ids,model,
-    subsample_pct=1.0, train_pct=0.75, reg_low=-3,reg_high=3, scoring='f1_weighted'):
+    print 'Percent Accuracy: %0.3f%%' % (100 * sklearn.metrics.accuracy_score(y_true, y_pred))
+
+
+def train_and_score_model(X, y, case_ids, model,
+                          subsample_pct, train_pct, reg_low, reg_high, scoring, regularization_type):
     '''
     Train and score a model
     Args:
@@ -154,68 +154,135 @@ def train_and_score_model(X,y,case_ids,model,
         train_pct: float between 0 and 1.  Fraction of your subsample to use as training.
         reg_low, reg_high: integers.  The low and high of your grid search for regularization parameter.
         scoring: scoring method
+        regularization_type: the type of regularation to use. 'l1', 'l2' or None.
 
     Returns:
         Model score
 
     Prints out: Model score and confusion matrix
     '''
-
-
     start_time = time.time()
 
-    print 'Sampling data down to %i percent...' % (subsample_pct*100)
-    if subsample_pct<=1.0 and subsample_pct>0:
-        if subsample_pct<1.0:
-            X,y,case_ids = subsample(X,y,case_ids,subsample_pct)
+    print '\nFitting New Model'
+    print 'Model:', model
+    print 'Feature Matrix Info:'
+    print '  Number of cases', X.shape[0]
+    print '  Number of features', X.shape[1]
+    print 'Training percentage', train_pct
+    print 'Scoring used:', scoring
+    print 'Regularization type:', regularization_type
+    if reg_low and reg_high:
+        print 'Regularization bounded between 10^(%d) and 10^(%d):' % (
+            reg_low, reg_high)
+
+    print ''
+    if subsample_pct <= 1.0 and subsample_pct > 0:
+        if subsample_pct < 1.0:
+            print 'Sampling data down to %i percent...' % (subsample_pct*100)
+            X, y, case_ids = subsample(X, y, case_ids, subsample_pct)
     else:
-        print "Subsample percent must be between 0 and 1"
+        print "ERROR: Subsample percent must be between 0 and 1"
         return
 
-    print 'splitting...'
-    X_train,y_train,case_ids_train,X_test,y_test,case_ids_test = train_test_split(X,y,case_ids,0.75)
+    print 'Splitting data into training and testing...'
+    X_train, y_train, case_ids_train, X_test, y_test, case_ids_test = train_test_split(X, y, case_ids, train_pct)
     
-    reg_low = int(reg_low)
-    reg_high = int(reg_high)
-
-    print 'fitting chosen model: %s...' % model
-    if model=='svm':
-        fitted_model = optimizeSVM(X_train,y_train,scoring,reg_low,reg_high)
-    elif model=='logistic':
-        fitted_model = optimizeLogistic(X_train,y_train,scoring,reg_low,reg_high)
-    elif model=='baseline':
+    print 'Fitting model...'
+    if model == 'svm':
+        fitted_model = optimizeSVM(X_train, y_train, scoring, reg_low, reg_high, regularization_type)
+    elif model == 'logistic':
+        fitted_model = optimizeLogistic(X_train, y_train, scoring, reg_low, reg_high, regularization_type)
+    elif model == 'baseline':
         fitted_model = MajorityClassifier()
         fitted_model.fit(X_train,y_train)
     else:
-        print "error: model unknown"
+        print "ERROR: model unknown"
         return
 
-    print 'evaluating model...'
-    #fitted_model.score(X_test,y_test)
-    print 'total time:', time.time() - start_time
+    print 'Total time:', time.time() - start_time
 
-    score = evaluate_accuracy(fitted_model.predict(X_test),y_test)
-    print "Score = ",score
-    return score
-    print ""
+    print "Training Accuracy"
+    train_accuracy = print_accuracy_info(fitted_model.predict(X_train), y_train)
+    print "Testing Accuracy"
+    test_accuracy = print_accuracy_info(fitted_model.predict(X_test), y_test)
+
 
 def main():
+    DEFAULT_INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
+    DEFAULT_OUTPUT_DATA_DIR = '/tmp'
 
-    print 'loading data...'
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--input_data_dir', default=DEFAULT_INPUT_DATA_DIR)
+    parser.add_argument('--output_data_dir', default=DEFAULT_OUTPUT_DATA_DIR)
+    args = vars(parser.parse_args())
+    input_data_dir = args['input_data_dir']
+    output_data_dir = args['output_data_dir']
+
+    NUM_SHARDS = 100 #1340
+    MIN_REQUIRED_COUNT = 10 #150
+    USE_TFIDF = True 
+
     CASE_DATA_FILENAME = 'merged_caselevel_data.csv'
-    case_data_dir = '../data'
-    cases_df = extract_metadata.extract_metadata(case_data_dir+'/'+CASE_DATA_FILENAME)
-    num_shards = 1340
-    X,case_ids,y = jd.load_data('../data/feature_matrix_100.svmlight',
-              '../data/case_ids.p',
-              cases_df, 
-              '../data/docvec_text',
-              num_opinion_shards=num_shards)
+    cases_df = extract_metadata.extract_metadata(input_data_dir+'/'+CASE_DATA_FILENAME)
+    opinion_data_dir = input_data_dir + '/docvec_text'
+    feature_matrix_file = '%s/feature_matrix.svmlight.shards.%d.mincount.%d' % (
+        output_data_dir, NUM_SHARDS, MIN_REQUIRED_COUNT)
+    case_ids_file = '%s/case_ids.shards.p.%d.mincount.%d' % (
+        output_data_dir, NUM_SHARDS, MIN_REQUIRED_COUNT)
+
+    X, case_ids, y = jd.load_data(feature_matrix_file, 
+                                  case_ids_file,
+                                  cases_df, 
+                                  opinion_data_dir,
+                                  num_opinion_shards=NUM_SHARDS,
+                                  min_required_count=MIN_REQUIRED_COUNT,
+                                  tfidf=USE_TFIDF)
 
     print 'training and scoring models...'
-    train_and_score_model(X,y,case_ids,'baseline',subsample_pct=1)
-    train_and_score_model(X,y,case_ids,'logistic',subsample_pct=0.5)
-    train_and_score_model(X,y,case_ids,'svm',subsample_pct=0.1)
+    train_and_score_model(X, y, case_ids, 'baseline', subsample_pct=1.0, train_pct=0.75, 
+                          reg_low=None, reg_high=None, scoring=None, regularization_type=None)
+    train_and_score_model(X, y, case_ids, 'logistic', subsample_pct=1.0, train_pct=0.75,
+                          reg_low=-2, reg_high=2, scoring='f1_weighted', regularization_type='l1')
+    train_and_score_model(X, y, case_ids, 'svm', subsample_pct=1.0, train_pct=0.75,
+                          reg_low=-2, reg_high=2, scoring='f1_weighted', regularization_type='l1')
+
+
+    # TODO P0 Implement Multinomial Naive Bayes
+    # http://scikit-learn.org/stable/modules/naive_bayes.html#multinomial-naive-bayes
+
+    # TODO P0 Implement Bernouilli Naive Bayes
+    # http://scikit-learn.org/stable/modules/naive_bayes.html#bernoulli-naive-bayes
+
+    # TODO P0 Create bar charts to visualize which classifiers are better
+
+
+    # TODO P1 Calculate scores other than f1_weighted
+
+    # TODO P1 Print top 50 most-used N-Grams for each classifier
+
+    # TODO P1 Write a second base classifier
+    # There should be a one that guesses randomly, but in proportion to the different classes
+    # This will probably do better than the other base classifier. We have to beat this!
+
+    # TODO P1 why are we using f1_weighted? We need to cite a justafication
+    # We should be able to justify f1 weighted using this doc:
+    # http://scikit-learn.org/stable/modules/model_evaluation.html#from-binary-to-multiclass-and-multilabel
+
+    # TODO P1 Try LogisticRegressionCV, which uses a 'regularization path', so it's faster than grid search
+    # http://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegressionCV.html#sklearn.linear_model.LogisticRegressionCV
+
+
+    # TODO P2 Visualize the confustion matrix
+    # http://scikit-learn.org/stable/auto_examples/model_selection/plot_confusion_matrix.html#example-model-selection-plot-confusion-matrix-py
+
+    # TODO P2 Look into using pipeline system for setting up experiments
+    # THis will allows us to try different data sizes, data prep, and hyper params. 
+    # Example: http://scikit-learn.org/stable/auto_examples/model_selection/grid_search_text_feature_extraction.html#example-model-selection-grid-search-text-feature-extraction-py
+
+    # TODO P2 try other model-specific cross validation techniques
+    # http://scikit-learn.org/stable/modules/grid_search.html#model-specific-cross-validation
+
+
 
 if __name__ == '__main__':
     main()
