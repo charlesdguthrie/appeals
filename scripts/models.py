@@ -1,4 +1,3 @@
-import argparse
 import pandas as pd
 import numpy as np
 import pickler
@@ -208,43 +207,31 @@ def train_and_score_model(X, y, case_ids, model,
 
 
 def main():
-    DEFAULT_INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
-    DEFAULT_OUTPUT_DATA_DIR = '/tmp'
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--input_data_dir', default=DEFAULT_INPUT_DATA_DIR)
-    parser.add_argument('--output_data_dir', default=DEFAULT_OUTPUT_DATA_DIR)
-    args = vars(parser.parse_args())
-    input_data_dir = args['input_data_dir']
-    output_data_dir = args['output_data_dir']
-
-    NUM_SHARDS = 100 #1340
+    # Data params
+    INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
+    OUTPUT_DATA_DIR = '/tmp'
+    NUM_OPINION_SHARDS = 100 #1340
     MIN_REQUIRED_COUNT = 10 #150
-    USE_TFIDF = True 
+    USE_TFIDF = True
 
-    CASE_DATA_FILENAME = 'merged_caselevel_data.csv'
-    cases_df = extract_metadata.extract_metadata(input_data_dir+'/'+CASE_DATA_FILENAME)
-    opinion_data_dir = input_data_dir + '/docvec_text'
-    feature_matrix_file = '%s/feature_matrix.svmlight.shards.%d.mincount.%d' % (
-        output_data_dir, NUM_SHARDS, MIN_REQUIRED_COUNT)
-    case_ids_file = '%s/case_ids.shards.p.%d.mincount.%d' % (
-        output_data_dir, NUM_SHARDS, MIN_REQUIRED_COUNT)
+    # Model params
+    SUBSAMPLE_PCT = 1.0
+    TRAIN_PCT = 0.75
+    REG_LOW = -2
+    REG_HIGH = 2
+    SCORING = 'f1_weighted'
+    REGULARIZATION_TYPE='l1'
 
-    X, case_ids, y = jd.load_data(feature_matrix_file, 
-                                  case_ids_file,
-                                  cases_df, 
-                                  opinion_data_dir,
-                                  num_opinion_shards=NUM_SHARDS,
-                                  min_required_count=MIN_REQUIRED_COUNT,
-                                  tfidf=USE_TFIDF)
+    X, case_ids, y = jd.load_data(INPUT_DATA_DIR, OUTPUT_DATA_DIR,
+                                  NUM_OPINION_SHARDS, MIN_REQUIRED_COUNT, USE_TFIDF)
 
-    print 'training and scoring models...'
-    train_and_score_model(X, y, case_ids, 'baseline', subsample_pct=1.0, train_pct=0.75, 
+    print 'Training and scoring models...'
+    train_and_score_model(X, y, case_ids, 'baseline', subsample_pct=SUBSAMPLE_PCT, train_pct=TRAIN_PCT, 
                           reg_low=None, reg_high=None, scoring=None, regularization_type=None)
-    train_and_score_model(X, y, case_ids, 'logistic', subsample_pct=1.0, train_pct=0.75,
-                          reg_low=-2, reg_high=2, scoring='f1_weighted', regularization_type='l1')
-    train_and_score_model(X, y, case_ids, 'svm', subsample_pct=1.0, train_pct=0.75,
-                          reg_low=-2, reg_high=2, scoring='f1_weighted', regularization_type='l1')
+    train_and_score_model(X, y, case_ids, 'logistic', subsample_pct=SUBSAMPLE_PCT, train_pct=TRAIN_PCT,
+                          reg_low=REG_LOW, reg_high=REG_HIGH, scoring=SCORING, regularization_type=REGULARIZATION_TYPE)
+    train_and_score_model(X, y, case_ids, 'svm', subsample_pct=SUBSAMPLE_PCT, train_pct=TRAIN_PCT,
+                          reg_low=REG_LOW, reg_high=REG_HIGH, scoring=SCORING, regularization_type=REGULARIZATION_TYPE)
 
 
     # TODO P0 Implement Multinomial Naive Bayes

@@ -14,19 +14,16 @@ import sklearn.feature_extraction
 import sys
 import time
 
-INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
-OUTPUT_DATA_DIR = '/tmp'
-
+# Constants
 CASE_DATA_FILENAME = 'merged_caselevel_data.csv'
 SHARD_FILE_PREFIX = 'part-'
+OPINION_DATA_DIR = 'docvec_text'
 # NOTE: change this to control the number of shard files to read. Max number is 1340.
 TOTAL_NUM_SHARDS = 1340
 NGRAM_COUNTS_FILE_PREFIX = 'total_ngram_counts.p.'
 
-# Main Parameters
-NUM_SHARDS = 40 #1340
-MIN_REQUIRED_COUNT = 4 #150
-USE_TFIDF = True
+# A global variable hack to be set when the program is run.
+GLOBAL_INPUT_DATA_DIR = None
 
 # Stats:
 # num unique case_ids:  17178
@@ -91,29 +88,19 @@ def extract_docvec_lines(case_ids, opinion_data_dir, num_opinion_shards,
     return {case_id: lines[0] for case_id, lines, in case_id_opinion_lines.iteritems()}
 
 
-def print_opinion_data_stats(case_data_dir, opinion_data_dir):
-    """Testing function"""
-    cases_df = extract_metadata.extract_metadata(case_data_dir+'/'+CASE_DATA_FILENAME)
-    case_ids = cases_df['caseid']
-    extract_docvec_lines(case_ids, opinion_data_dir, TOTAL_NUM_SHARDS, print_stats=True)
-
-
-# TODO Do experiments to find the best value for this.
-def filter_infrequent_ngrams(rows_ngram_counts, case_ids, min_required_count,
-                             load_from_file=True):
+def filter_infrequent_ngrams(rows_ngram_counts, case_ids, min_required_count, 
+                             write_total_counts_to_disk=True):
     """
     Counts the number of times each n-gram occurs throughout the corpus, and 
     filters out the low-occuring ones.
+    As a side effect, this also writes the total_ngram_counts dict to disk in
+    GLOBAL_INPUT_DATA_DIR. I want to use this to decode the data dictionary.
 
     Args:
       rows_ngram_counts: The list of n-gram counts for each case.
       case_ids: The case IDs corresponding to each set of n-grams.
       min_required_count: Positive integer. The minimum number of times an
         n-gram must occur in total in order to be left in.
-      load_from_file: If true, the function will try to load the n-gram counts 
-        for the given case IDs from a pre-computed file. In this case, the 
-        row_ngram_counts dict will be ignored. If false, the total counts will
-        be computed directly and saved to disk.
 
     Returns:
       filtered_rows_ngram_counts: The list of n-gram counts for each case. The
@@ -128,11 +115,13 @@ def filter_infrequent_ngrams(rows_ngram_counts, case_ids, min_required_count,
         for ngram_id, count in ngram_counts.iteritems():
             total_ngram_counts[ngram_id] += count
 
-    # TODO saving pickle file to disk in hopes that it can be used for decoding the dict
-    print 'Writing n-gram counts to disk...'
-    filename = INPUT_DATA_DIR + '/' + NGRAM_COUNTS_FILE_PREFIX + str(len(case_ids))
-    with open(filename, 'wb') as f:
-        pickle.dump(total_ngram_counts, f)
+    # <HACK> to save the total counts dict to a file
+    if GLOBAL_INPUT_DATA_DIR:
+        print 'Writing n-gram counts to disk...'
+        filename = GLOBAL_INPUT_DATA_DIR + '/' + NGRAM_COUNTS_FILE_PREFIX + str(len(case_ids))
+        with open(filename, 'wb') as f:
+            pickle.dump(total_ngram_counts, f)
+    # </HACK>
 
     print 'Filtering n-grams...'
     ngrams_to_keep = set([])
@@ -140,7 +129,7 @@ def filter_infrequent_ngrams(rows_ngram_counts, case_ids, min_required_count,
         if count >= min_required_count:
             ngrams_to_keep.add(ngram_id)
 
-    # TODO a desperate attempt to free up memory
+    # Note: a desperate attempt to free up memory
     del total_ngram_counts
 
     row_indices_to_delete = []
@@ -187,7 +176,6 @@ def parse_opinion_shards(case_ids, opinion_data_dir, num_opinion_shards):
     # Extract only the n-grams with the given case IDs
     case_id_opinion_lines = extract_docvec_lines(case_ids, opinion_data_dir, 
                                                  num_opinion_shards)
-
     # Constants needed to parse opinion lines
     SEPARATOR = "', '"
     SEPARATOR_ALT = "\", '"
@@ -317,9 +305,11 @@ def construct_sparse_opinion_matrix(cases_df, opinion_data_dir,
 
     rows_ngram_counts, case_ids = parse_opinion_shards(
         case_ids_df, opinion_data_dir, num_opinion_shards)
+
     if min_required_count > 1:
         rows_ngram_counts, case_ids = filter_infrequent_ngrams(
             rows_ngram_counts, case_ids, min_required_count)
+
     rows_ngram_counts, case_ids = sort_case_lists(cases_df, rows_ngram_counts, 
                                                   case_ids)
 
@@ -346,13 +336,36 @@ def construct_sparse_opinion_matrix(cases_df, opinion_data_dir,
     return sparse_feature_matrix, case_ids, valences
 
 
-def load_data(matrix_data_filename,
-              case_ids_filename,
-              cases_df, 
-              opinion_data_dir,
-              num_opinion_shards,
-              min_required_count,
-              tfidf):
+def build_filenames_from_params(output_data_dir, num_shards, min_required_count,
+                                tfidf):
+    """
+    Builds filesnames that include the given parameter values in them, for 
+    documentation.
+
+    Args:
+      output_data_dir: The base directory for all output files.
+      num_opinion_shards: The number of opinion shard files to read in.
+      min_required_count: The minimum number of of times an n-gram must appear
+        throughout all documents in order to be included in the data.
+      tfidf: Boolean. If set, the returned feature matrix has been normalized
+        using TF-IDF.
+    Returns:
+      feature_matrix_filename: A string to be used as the name of the feauture
+        matrix file.
+      case_ids_filename: A string to be used as the name of the case IDs file.
+    """
+    feature_matrix_filename = '%s/feature_matrix.svmlight.shards.%d.mincount.%d' % (
+        output_data_dir, num_shards, min_required_count)
+    case_ids_filename = '%s/case_ids.shards.p.%d.mincount.%d' % (
+        output_data_dir, num_shards, min_required_count)
+    if tfidf:
+        feature_matrix_filename += '.tfidf'
+        case_ids_filename += '.tfidf'
+    return feature_matrix_filename, case_ids_filename
+
+
+def load_data(input_data_dir, output_data_dir,
+              num_opinion_shards, min_required_count, tfidf):
     """
     Looks to see if the file containing the feature matrix and target labels 
     exists, along with the file containing their corresponding case IDs. If so, 
@@ -361,14 +374,11 @@ def load_data(matrix_data_filename,
     constructed, it saves them to disk and returns them.
 
     Args:
-      matrix_data_filename: The svmlight file containing the features and target
-        variables.
-      case_ids_filename: The name of the pickle file containing the case IDs 
-        list.
-      case_df: A dataframe containing the case variables. Must include caseid, 
-        year, month, day, and direct1.
-      opinion_data_dir: The directory where the opinion n-gram shard files
-        reside.
+      input_data_dir: The directory that contains all input data. This directory
+        should contain another directory that contains the ngram shard files
+        (aka OPINION_DATA_DIR).
+      output_data_dir: The directory where the generated data should be written
+        if it has to be generated from scratch.
       num_opinion_shards: The number of opinion shard files to read in.
       min_required_count: The minimum number of of times an n-gram must appear
         throughout all documents in order to be included in the data.
@@ -386,70 +396,54 @@ def load_data(matrix_data_filename,
     start_time = time.time()
 
     print 'Data parameters:'
-    print '  Number of opinion shards:', NUM_SHARDS
-    print '  Minimum required count:', MIN_REQUIRED_COUNT
-    print '  Using TF-IDF:', USE_TFIDF
+    print '  Number of opinion shards:', num_opinion_shards
+    print '  Minimum required count:', min_required_count
+    print '  Using TF-IDF:', tfidf
 
-    if os.path.isfile(matrix_data_filename) and os.path.isfile(case_ids_filename):
-        with open(matrix_data_filename, 'rb') as f:
+    # Look to see if the data files have already been saved to disk.
+    feature_matrix_filename, case_ids_filename = build_filenames_from_params(
+        output_data_dir, num_opinion_shards, min_required_count, tfidf)
+
+    if os.path.isfile(feature_matrix_filename) and os.path.isfile(case_ids_filename):
+        with open(feature_matrix_filename, 'rb') as f:
             sparse_feature_matrix, valences = sklearn.datasets.load_svmlight_file(f)
         with open(case_ids_filename, 'rb') as f:
             case_ids = pickle.load(f)
-        print 'Data loaded from', matrix_data_filename, 'and', case_ids_filename
+        print 'Data loaded from', feature_matrix_filename, 'and', case_ids_filename
     else:
         print 'Constructing data from scratch...'
+        print 'Reading input data from from:', input_data_dir
+        cases_df = extract_metadata.extract_metadata(input_data_dir + '/' + CASE_DATA_FILENAME)
+        opinion_data_dir = input_data_dir + '/' + OPINION_DATA_DIR
+        # <HACK> to save the total counts dict to a file
+        global GLOBAL_INPUT_DATA_DIR
+        GLOBAL_INPUT_DATA_DIR = input_data_dir
+        # </HACK>
         sparse_feature_matrix, case_ids, valences = construct_sparse_opinion_matrix(
-            cases_df, opinion_data_dir, num_opinion_shards=num_opinion_shards,
-            min_required_count=min_required_count, tfidf=tfidf)
-        print 'Writing input data to disk'
+            cases_df, opinion_data_dir, 
+            num_opinion_shards, min_required_count, tfidf)
+        print 'Writing input data to disk...'
         sklearn.datasets.dump_svmlight_file(sparse_feature_matrix, valences, 
-                                            matrix_data_filename)
+                                            feature_matrix_filename)
         with open(case_ids_filename, 'wb') as f:
             pickle.dump(case_ids, f)
-        print 'Feature matrix saved as %s' % matrix_data_filename
+        print 'Feature matrix saved as %s' % feature_matrix_filename
         print 'Case IDs saved as %s' % case_ids_filename
 
     print 'Total time spent building data:', time.time() - start_time
     return sparse_feature_matrix, case_ids, valences
 
 
-def build_filenames_from_params(output_data_dir, num_shards, min_required_count,
-                                tfidf):
-    """
-    Builds filesnames that include the given parameter values in them, for 
-    documentation.
-
-    Args:
-      output_data_dir: The base directory for all output files.
-      num_opinion_shards: The number of opinion shard files to read in.
-      min_required_count: The minimum number of of times an n-gram must appear
-        throughout all documents in order to be included in the data.
-      tfidf: Boolean. If set, the returned feature matrix has been normalized
-        using TF-IDF.
-    Returns:
-      feature_matrix_file: A string to be used as the name of the feauture
-        matrix file.
-      case_ids_file: A string to be used as the name of the case IDs file.
-    """
-    feature_matrix_file = '%s/feature_matrix.svmlight.shards.%d.mincount.%d' % (
-        OUTPUT_DATA_DIR, NUM_SHARDS, MIN_REQUIRED_COUNT)
-    case_ids_file = '%s/case_ids.shards.p.%d.mincount.%d' % (
-        OUTPUT_DATA_DIR, NUM_SHARDS, MIN_REQUIRED_COUNT)
-    if tfidf:
-        feature_matrix_file += '.tfidf'
-        case_ids_file += '.tfidf'
-    return feature_matrix_file, case_ids_file
-
-
 if __name__ == '__main__':
-    cases_df = extract_metadata.extract_metadata(INPUT_DATA_DIR+'/'+CASE_DATA_FILENAME)
-    opinion_data_dir = INPUT_DATA_DIR + '/docvec_text'
-    feature_matrix_file, case_ids_file = build_filenames_from_params(
-        OUTPUT_DATA_DIR, NUM_SHARDS, MIN_REQUIRED_COUNT, USE_TFIDF)
-    load_data(feature_matrix_file, 
-              case_ids_file,
-              cases_df, 
-              opinion_data_dir,
-              num_opinion_shards=NUM_SHARDS,
-              min_required_count=MIN_REQUIRED_COUNT,
-              tfidf=USE_TFIDF)
+    # Main Parameters
+    num_opinion_shards = 50 #1340
+    min_required_count = 4 #150
+    tfidf = True
+    input_data_dir = '/Users/pinesol/mlcs_data'
+    output_data_dir = '/tmp'
+
+    load_data(input_data_dir,
+              output_data_dir,
+              num_opinion_shards,
+              min_required_count,
+              tfidf)
