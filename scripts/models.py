@@ -11,7 +11,7 @@ from sklearn.svm import LinearSVC
 from sklearn.linear_model import LogisticRegression
 import sklearn.metrics
 from sklearn.grid_search import GridSearchCV
-
+from sklearn.naive_bayes import BernoulliNB, MultinomialNB
 
 class MajorityClassifier:
     def fit(self,X_train,y_train):
@@ -114,6 +114,13 @@ def train_and_score_model(X, y, case_ids, model,
         elif model == 'logistic':
             classifier = LogisticRegression(penalty=regularization_type)
             param_grid['classifier__C'] = [10**i for i in range(reg_min_log10, reg_max_log10 + 1)]
+        elif model == 'naive_bayes':
+            # TODO why fit_prior? why not?
+            classifier = MultinomialNB(fit_prior=True)
+        elif model == 'bernoulli_bayes':
+            # TODO trying aribtrary thresholds for binarize b.c. i'm assuming we've TF-IDF'd the data already.
+            param_grid['classifier__binarize'] = [0.01, 0.1]
+            classifier = BernoulliNB()
         else:
             print "ERROR: model unknown"
             return
@@ -161,14 +168,11 @@ def main():
                           reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, regularization_type=REGULARIZATION_TYPE)
     train_and_score_model(X, y, case_ids, 'svm', train_pct=TRAIN_PCT,
                           reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, regularization_type=REGULARIZATION_TYPE)
+    train_and_score_model(X, y, case_ids, 'naive_bayes', train_pct=TRAIN_PCT,
+                          reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, regularization_type=REGULARIZATION_TYPE)
+    train_and_score_model(X, y, case_ids, 'bernoulli_bayes', train_pct=TRAIN_PCT,
+                          reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, regularization_type=REGULARIZATION_TYPE)
 
-
-
-    # TODO P0 Implement Multinomial Naive Bayes
-    # http://scikit-learn.org/stable/modules/naive_bayes.html#multinomial-naive-bayes
-
-    # TODO P0 Implement Bernouilli Naive Bayes
-    # http://scikit-learn.org/stable/modules/naive_bayes.html#bernoulli-naive-bayes
 
     # TODO P0 Create bar charts to visualize which classifiers are better
 
