@@ -158,8 +158,11 @@ def train_and_score_model(X, y, case_ids, model,
 
 def main():
     # Data params
-    INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
-    OUTPUT_DATA_DIR = '/tmp'
+    #INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
+    #OUTPUT_DATA_DIR = '/tmp'
+
+    INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
+    OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
     NUM_OPINION_SHARDS = 100 #1340
     MIN_REQUIRED_COUNT = 2 #150
     USE_TFIDF = True
@@ -198,9 +201,9 @@ def main():
     # TODO P0 Create bar charts to visualize which classifiers are better
 
 
-    # TODO P1 Calculate scores other than f1_weighted
+    # TODO P1.0 Print top 50 most-used N-Grams for each classifier
 
-    # TODO P1 Print top 50 most-used N-Grams for each classifier
+    # TODO P1.1 Calculate scores other than f1_weighted
 
     # TODO P1 Write a second base classifier
     # There should be a one that guesses randomly, but in proportion to the different classes
