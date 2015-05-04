@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-import pickler
+import cPickle as pickle
 import time
 import sys
 import extract_metadata
@@ -62,11 +62,64 @@ def print_accuracy_info(y_pred, y_true):
             row = row + " \t " + str(cm[i][j])
         print "\t " + str(int(u)) + row
 
-    print 'Percent Accuracy: %0.3f%%' % (100 * sklearn.metrics.accuracy_score(y_true, y_pred))
+    accuracy = sklearn.metrics.accuracy_score(y_true, y_pred)
 
+    print 'Percent Accuracy: %0.3f%%' % (100 * accuracy)
+    return accuracy
+
+def log_results(locals_dict,log_path):
+    '''
+    Save model parameters, accuracy, and training time as a dict and append to pickled log file
+    Args:
+        locals_dict: dictionary of variables in parent function
+        log_path: path to pickled log file
+        
+    Returns: None
+    '''
+    log_items = locals_dict
+    
+    #read results log
+    try:
+        log = pickle.load(open( log_path, "rb" ))
+    except:
+        print "Log file doesn't exist.  Creating from scratch."
+        log = []
+    
+    #Remove raw data from local_vars_dict
+    for key in ('X','y','case_ids','X_train', 'y_train', 'case_ids_train', 'X_test', 'y_test', 'case_ids_test'):
+        if key in log_items:
+            del log_items[key]
+    
+    #append result
+    log.append(log_items)
+    
+    #write to results log
+    pickle.dump( log, open( log_path, "wb" ) )
+
+def log_to_csv(log_path,csv_path):
+    '''
+    Convert log pickle to a csv.  Dict keys become columns
+    Args:
+        log_path: path to log file pickle.  Log is saved as an array of dicts
+        csv_path: csv save file
+        
+    Returns:
+        df: pandas DataFrame with every dict key as a column.  
+    '''
+    try:
+        log = pickle.load(open( log_path, "rb" ))
+    except:
+        print "Log file doesn't exist."
+        return
+    df = pd.DataFrame.from_dict(log)
+    
+    df.to_csv(csv_path)
+    
+    return df
 
 def train_and_score_model(X, y, case_ids, model,
-                          train_pct, reg_min_log10, reg_max_log10, scoring, regularization_type):
+                          train_pct, reg_min_log10, reg_max_log10, scoring, regularization_type,
+                          result_path):
     '''
     Train and score a model
     Args:
@@ -135,13 +188,16 @@ def train_and_score_model(X, y, case_ids, model,
         print 'best params:', fitted_model.best_params_
         print 'best score from that estimator:', fitted_model.best_score_
 
-    print 'Total time:', time.time() - start_time
+    total_time = time.time() - start_time
+    print 'Total time:', total_time
 
     print "Training Accuracy"
     train_accuracy = print_accuracy_info(fitted_model.predict(X_train), y_train)
     print "Testing Accuracy"
     test_accuracy = print_accuracy_info(fitted_model.predict(X_test), y_test)
 
+    #log parameters and output
+    log_results(locals(),result_path)
 
 def main():
     # Data params
@@ -150,6 +206,8 @@ def main():
 
     INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
     OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
+
+    RESULT_PATH = '../results/model_results.pkl'
     NUM_OPINION_SHARDS = 100 #1340
     MIN_REQUIRED_COUNT = 10 #150
     USE_TFIDF = True
@@ -166,18 +224,24 @@ def main():
 
     print 'Training and scoring models...'
     train_and_score_model(X, y, case_ids, 'baseline', train_pct=TRAIN_PCT, 
-                          reg_min_log10=None, reg_max_log10=None, scoring=None, regularization_type=None)
+                          reg_min_log10=None, reg_max_log10=None, scoring=None, regularization_type=None,
+                          result_path=RESULT_PATH)
     train_and_score_model(X, y, case_ids, 'logistic', train_pct=TRAIN_PCT,
-                          reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, regularization_type=REGULARIZATION_TYPE)
+                          reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, regularization_type=REGULARIZATION_TYPE,
+                          result_path=RESULT_PATH)
     train_and_score_model(X, y, case_ids, 'svm', train_pct=TRAIN_PCT,
-                          reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, regularization_type=REGULARIZATION_TYPE)
+                          reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, regularization_type=REGULARIZATION_TYPE,
+                          result_path=RESULT_PATH)
     train_and_score_model(X, y, case_ids, 'naive_bayes', train_pct=TRAIN_PCT,
-                          reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, regularization_type=REGULARIZATION_TYPE)
+                          reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, regularization_type=REGULARIZATION_TYPE,
+                          result_path=RESULT_PATH)
     train_and_score_model(X, y, case_ids, 'bernoulli_bayes', train_pct=TRAIN_PCT,
-                          reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, regularization_type=REGULARIZATION_TYPE)
+                          reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, regularization_type=REGULARIZATION_TYPE,
+                          result_path=RESULT_PATH)
 
 
     # TODO P0 Create bar charts to visualize which classifiers are better
+    # TODO P0.1 Create a function to log results
 
 
     # TODO P1.0 Print top 50 most-used N-Grams for each classifier
@@ -188,7 +252,7 @@ def main():
     # There should be a one that guesses randomly, but in proportion to the different classes
     # This will probably do better than the other base classifier. We have to beat this!
 
-    # TODO P1 why are we using f1_weighted? We need to cite a justafication
+    # TODO P1 why are we using f1_weighted? We need to cite a justification
     # We should be able to justify f1 weighted using this doc:
     # http://scikit-learn.org/stable/modules/model_evaluation.html#from-binary-to-multiclass-and-multilabel
 
