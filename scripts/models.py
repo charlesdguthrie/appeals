@@ -230,9 +230,9 @@ def train_and_score_model(X, y, case_ids, model,
 
 def main():
     # HPC Params
-    #INPUT_DATA_DIR = '/scratch/akp258/ml_input_data'
-    #OUTPUT_DATA_DIR = '/scratch/akp258/ml_output_data'
-    #RESULT_PATH = '/scratch/akp258/ml_results/model_results.pkl'
+    INPUT_DATA_DIR = '/scratch/akp258/ml_input_data'
+    OUTPUT_DATA_DIR = '/scratch/akp258/ml_output_data'
+    RESULT_PATH = '/scratch/akp258/ml_results/model_results.pkl'
 
     # Alex Data params
     #INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
@@ -244,8 +244,8 @@ def main():
     #OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
     #RESULT_PATH = '../results/model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
 
-    NUM_OPINION_SHARDS = 30 #1340
-    MIN_REQUIRED_COUNT = 20 #150
+    NUM_OPINION_SHARDS = 1340
+    MIN_REQUIRED_COUNT = 50
     USE_TFIDF = True
 
     # Model params
