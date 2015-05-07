@@ -176,7 +176,6 @@ def train_and_score_model(X, y, case_ids, model,
         param_grid['feature_reduction__C'] = [10**i for i in range(reg_min_log10, reg_max_log10 + 1)] # TODO check where this ends up, expand around where it lands
 
     if model == 'baseline':
-        # TODO This isn't taking part in feature reduction!
         fitted_model = MajorityClassifier()
         fitted_model.fit(X_train, y_train)
     else:
@@ -230,17 +229,15 @@ def train_and_score_model(X, y, case_ids, model,
     return log_results(locals(),result_path)
 
 def main():
-    DESCRIPTION = '' # TODO add a description for real runs
-
     # HPC Params
     #INPUT_DATA_DIR = '/scratch/akp258/ml_input_data'
     #OUTPUT_DATA_DIR = '/scratch/akp258/ml_output_data'
-    #RESULT_PATH = '/scratch/akp258/ml_results/model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
+    #RESULT_PATH = '/scratch/akp258/ml_results/model_results.pkl'
 
     # Alex Data params
-    INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
-    OUTPUT_DATA_DIR = '/tmp'
-    RESULT_PATH = '/tmp/model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
+    #INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
+    #OUTPUT_DATA_DIR = '/tmp'
+    #RESULT_PATH = '/tmp/model_results.pkl'
 
     # Charlie Params
     #INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
@@ -255,9 +252,13 @@ def main():
     TRAIN_PCT = 0.75
     REG_MIN_LOG10 = -2
     REG_MAX_LOG10 = 2
-    SCORING = 'f1_weighted'
+    SCORING = 'accuracy'
     # NOTE: this will be too slow to run locally if feature reduction is enabled
     FEATURE_REDUCTION_TYPE = None # TODO try 'chi2' or l1svc
+
+    DESCRIPTION = '.'.join([datetime.now().strftime('%Y%m%d-%H%M%S'), 'min_required_count', str(MIN_REQUIRED_COUNT), 
+                            FEATURE_REDUCTION_TYPE if FEATURE_REDUCTION_TYPE else '', SCORING]) 
+    RESULT_PATH = RESULT_PATH + '.' + DESCRIPTION
 
     print 'Experiment:', DESCRIPTION
 
@@ -281,8 +282,6 @@ def main():
     train_and_score_model(X, y, case_ids, 'bernoulli_bayes', train_pct=TRAIN_PCT,
                           reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, feature_reduction_type=FEATURE_REDUCTION_TYPE,
                           result_path=RESULT_PATH, description=DESCRIPTION)
-
-    # TODO P0 Make the baseline classifer work in the pipeline so it can take part in feature reduction.
 
     # TODO P0 Make regularization type something that varies in the pipline
 
