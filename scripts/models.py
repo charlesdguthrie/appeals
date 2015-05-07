@@ -220,9 +220,9 @@ def main():
     #RESULT_PATH = '/scratch/akp258/ml_results/model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
 
     # Alex Data params
-    INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
-    OUTPUT_DATA_DIR = '/tmp'
-    RESULT_PATH = '/tmp//model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
+    #INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
+    #OUTPUT_DATA_DIR = '/tmp'
+    #RESULT_PATH = '/tmp//model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
 
     # Charlie Params
     #INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
