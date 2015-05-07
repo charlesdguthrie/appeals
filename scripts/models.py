@@ -90,7 +90,7 @@ def log_results(locals_dict,log_path):
     #Remove raw data from local_vars_dict
     for key in ('X','y','case_ids','X_train', 'y_train', 'case_ids_train', 
         'X_test', 'y_test', 'case_ids_test',
-        'classifier'):
+        'classifier','fitted_model'):
         if key in log_items:
             del log_items[key]
 
@@ -105,6 +105,7 @@ def log_results(locals_dict,log_path):
     #write to results log
     pickle.dump( log, open( log_path, "wb" ) )
 
+    print "*************LOG************",log
     return log
 
 def log_to_csv(log_path,csv_path):
@@ -149,11 +150,14 @@ def train_and_score_model(X, y, case_ids, model,
     '''
     start_time = time.time()
 
+    num_cases = X.shape[0]
+    num_features = X.shape[1]
+
     print '\nFitting New Model'
     print 'Model:', model
     print 'Feature Matrix Info:'
-    print '  Number of cases', X.shape[0]
-    print '  Number of features', X.shape[1]
+    print '  Number of cases', num_cases
+    print '  Number of features', num_features
     print 'Training percentage', train_pct
     print 'Scoring used:', scoring
     if reg_min_log10 and reg_max_log10:
@@ -221,10 +225,10 @@ def train_and_score_model(X, y, case_ids, model,
     total_time = time.time() - start_time
     print 'Total time:', total_time
 
-    print "Training Accuracy"
     train_accuracy = print_accuracy_info(fitted_model.predict(X_train), y_train)
-    print "Testing Accuracy"
+    print "Training Accuracy",train_accuracy
     test_accuracy = print_accuracy_info(fitted_model.predict(X_test), y_test)
+    print "Testing Accuracy",test_accuracy
 
     #log parameters and output and return log
     return log_results(locals(),result_path)
@@ -238,16 +242,16 @@ def main():
     #RESULT_PATH = '/scratch/akp258/ml_results/model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
 
     # Alex Data params
-    INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
-    OUTPUT_DATA_DIR = '/tmp'
-    RESULT_PATH = '/tmp/model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
+    #INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
+    #OUTPUT_DATA_DIR = '/tmp'
+    #RESULT_PATH = '/tmp/model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
 
     # Charlie Params
-    #INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
-    #OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
-    #RESULT_PATH = '../results/model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
+    INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
+    OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
+    RESULT_PATH = '../results/model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
 
-    NUM_OPINION_SHARDS = 30 #1340
+    NUM_OPINION_SHARDS = 100 #1340
     MIN_REQUIRED_COUNT = 20 #150
     USE_TFIDF = True
 
@@ -255,7 +259,7 @@ def main():
     TRAIN_PCT = 0.75
     REG_MIN_LOG10 = -2
     REG_MAX_LOG10 = 2
-    SCORING = 'f1_weighted'
+    SCORING = 'accuracy'
     # NOTE: this will be too slow to run locally if feature reduction is enabled
     FEATURE_REDUCTION_TYPE = None # TODO try 'chi2' or l1svc
 
