@@ -211,7 +211,9 @@ def train_and_score_model(X, y, case_ids, model,
         fitted_model.fit(X_train, y_train)
 
         #Save these to variables so the log can access
-        grid_scores = fitted_model.grid_scores_
+        grid_scores=[]
+        for grid in fitted_model.grid_scores_:
+            grid_scores.append({'parameters': grid.parameters, 'score':grid.mean_validation_score})
         best_estimator = fitted_model.best_estimator_
         best_params = fitted_model.best_params_
         best_score = fitted_model.best_score_
