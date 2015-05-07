@@ -121,7 +121,7 @@ def log_to_csv(log_path,csv_path):
 
 def train_and_score_model(X, y, case_ids, model,
                           train_pct, reg_min_log10, reg_max_log10, scoring, feature_reduction_type,
-                          result_path):
+                          result_path, description):
     '''
     Train and score a model
     Args:
@@ -131,7 +131,8 @@ def train_and_score_model(X, y, case_ids, model,
         reg_min_log10, reg_max_log10: integers.  The low and high of your grid search for regularization parameter.
         scoring: scoring method
         feature_reduction_type: Either 'chi2', 'l1svc', or None.
-
+        result_path: The path of the filename to which the results should be written.
+        description: The experiment description, to be saved in the results file.
     Returns:
         Model score
 
@@ -214,15 +215,17 @@ def train_and_score_model(X, y, case_ids, model,
     log_results(locals(),result_path)
 
 def main():
+    DESCRIPTION = '' # TODO add a description for real runs
+
     # HPC Params
     #INPUT_DATA_DIR = '/scratch/akp258/ml_input_data'
     #OUTPUT_DATA_DIR = '/scratch/akp258/ml_output_data'
     #RESULT_PATH = '/scratch/akp258/ml_results/model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
 
     # Alex Data params
-    #INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
-    #OUTPUT_DATA_DIR = '/tmp'
-    #RESULT_PATH = '/tmp//model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
+    INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
+    OUTPUT_DATA_DIR = '/tmp'
+    RESULT_PATH = '/tmp/model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
 
     # Charlie Params
     #INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
@@ -241,6 +244,8 @@ def main():
     # NOTE: this will be too slow to run locally if feature reduction is enabled
     FEATURE_REDUCTION_TYPE = None # TODO try 'chi2' or l1svc
 
+    print 'Experiment:', DESCRIPTION
+
     X, case_ids, y = jd.load_data(INPUT_DATA_DIR, OUTPUT_DATA_DIR,
                                   NUM_OPINION_SHARDS, MIN_REQUIRED_COUNT, USE_TFIDF)
 
@@ -248,19 +253,19 @@ def main():
     print 'Training and scoring models...'
     train_and_score_model(X, y, case_ids, 'baseline', train_pct=TRAIN_PCT, 
                           reg_min_log10=None, reg_max_log10=None, scoring=None, feature_reduction_type=FEATURE_REDUCTION_TYPE,
-                          result_path=RESULT_PATH)
+                          result_path=RESULT_PATH, description=DESCRIPTION)
     train_and_score_model(X, y, case_ids, 'logistic', train_pct=TRAIN_PCT,
                           reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, feature_reduction_type=FEATURE_REDUCTION_TYPE,
-                          result_path=RESULT_PATH)
+                          result_path=RESULT_PATH, description=DESCRIPTION)
     train_and_score_model(X, y, case_ids, 'svm', train_pct=TRAIN_PCT,
                           reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, feature_reduction_type=FEATURE_REDUCTION_TYPE,
-                          result_path=RESULT_PATH)
+                          result_path=RESULT_PATH, description=DESCRIPTION)
     train_and_score_model(X, y, case_ids, 'naive_bayes', train_pct=TRAIN_PCT,
                           reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, feature_reduction_type=FEATURE_REDUCTION_TYPE,
-                          result_path=RESULT_PATH)
+                          result_path=RESULT_PATH, description=DESCRIPTION)
     train_and_score_model(X, y, case_ids, 'bernoulli_bayes', train_pct=TRAIN_PCT,
                           reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, feature_reduction_type=FEATURE_REDUCTION_TYPE,
-                          result_path=RESULT_PATH)
+                          result_path=RESULT_PATH, description=DESCRIPTION)
 
     # TODO P0 Make the baseline classifer work in the pipeline so it can take part in feature reduction.
 
