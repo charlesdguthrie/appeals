@@ -166,19 +166,19 @@ def train_and_score_model(X, y, case_ids, model,
     pipeline_steps = list()
     param_grid = dict()
 
-    # Feature reduction step
-    if feature_reduction_type == 'chi2':
-        pipeline_steps.append(('feature_reduction', SelectFpr(chi2)))
-        param_grid['feature_reduction__alpha'] = [0.6, 0.8, 1.0] # TODO check where this ends up, expand around where it lands
-    elif feature_reduction_type == 'l1svc':
-        # TODO we can modify the stopping point with 'tol'
-        pipeline_steps.append(('feature_reduction', LinearSVC(penalty="l1", dual=False)))
-        param_grid['feature_reduction__C'] = [10**i for i in range(reg_min_log10, reg_max_log10 + 1)] # TODO check where this ends up, expand around where it lands
-
     if model == 'baseline':
         fitted_model = MajorityClassifier()
         fitted_model.fit(X_train, y_train)
     else:
+        # Feature reduction step
+        if feature_reduction_type == 'chi2':
+            pipeline_steps.append(('feature_reduction', SelectFpr(chi2)))
+            param_grid['feature_reduction__alpha'] = [0.4, 0.6, 0.8, 1.0]
+        elif feature_reduction_type == 'l1svc':
+            # TODO we can modify the stopping point with 'tol'
+            pipeline_steps.append(('feature_reduction', LinearSVC(penalty="l1", dual=False)))
+            param_grid['feature_reduction__C'] = [10**i for i in range(reg_min_log10, reg_max_log10 + 1)]
+        # Model training step
         if model == 'svm':
             # random_state=0 so it always has the same seed so we get deterministic results.
             # Using dual=False b.c. there are lots of features.
@@ -254,10 +254,10 @@ def main():
     REG_MAX_LOG10 = 2
     SCORING = 'accuracy'
     # NOTE: this will be too slow to run locally if feature reduction is enabled
-    FEATURE_REDUCTION_TYPE = None # TODO try 'chi2' or l1svc
+    FEATURE_REDUCTION_TYPE = 'chi2' # TODO try 'chi2' or l1svc
 
     DESCRIPTION = '.'.join([datetime.now().strftime('%Y%m%d-%H%M%S'), 'min_required_count', str(MIN_REQUIRED_COUNT), 
-                            FEATURE_REDUCTION_TYPE if FEATURE_REDUCTION_TYPE else '', SCORING]) 
+                            FEATURE_REDUCTION_TYPE if FEATURE_REDUCTION_TYPE else 'all_features', SCORING]) 
     RESULT_PATH = RESULT_PATH + '.' + DESCRIPTION
 
     print 'Experiment:', DESCRIPTION
