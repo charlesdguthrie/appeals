@@ -87,15 +87,24 @@ def log_results(locals_dict,log_path):
         log = []
     
     #Remove raw data from local_vars_dict
-    for key in ('X','y','case_ids','X_train', 'y_train', 'case_ids_train', 'X_test', 'y_test', 'case_ids_test'):
+    for key in ('X','y','case_ids','X_train', 'y_train', 'case_ids_train', 
+        'X_test', 'y_test', 'case_ids_test',
+        'classifier'):
         if key in log_items:
             del log_items[key]
+
+    #TODO: parse fitted_model sub-variables (grid_scores,best_estimator, best_params, best_score)
+
+    #convert start timestamp to datetime
+    log_items['start_date_time']=time.ctime(int(log_items['start_time']))
     
     #append result
     log.append(log_items)
     
     #write to results log
     pickle.dump( log, open( log_path, "wb" ) )
+
+    return log
 
 def log_to_csv(log_path,csv_path):
     '''
@@ -197,6 +206,10 @@ def train_and_score_model(X, y, case_ids, model,
                                     verbose=1, n_jobs=-1)
         fitted_model.fit(X_train, y_train)
 
+        #Save these to variables so the log can access
+        grid_scores = fitted_model.grid_scores_
+        best_estimator = fitted_model.best_estimator_
+
         print 'Fitting Complete!\n'
         print 'best estimator:', fitted_model.best_estimator_
         print 'best params:', fitted_model.best_params_
@@ -210,8 +223,8 @@ def train_and_score_model(X, y, case_ids, model,
     print "Testing Accuracy"
     test_accuracy = print_accuracy_info(fitted_model.predict(X_test), y_test)
 
-    #log parameters and output
-    log_results(locals(),result_path)
+    #log parameters and output and return log
+    return log_results(locals(),result_path)
 
 def main():
     # Data params
@@ -222,8 +235,8 @@ def main():
     OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
 
     RESULT_PATH = '../results/model_results.pkl'
-    NUM_OPINION_SHARDS = 100 #1340
-    MIN_REQUIRED_COUNT = 2 #150
+    NUM_OPINION_SHARDS = 200 #1340
+    MIN_REQUIRED_COUNT = 20 #150
     USE_TFIDF = True
 
     # Model params
@@ -240,7 +253,7 @@ def main():
     # TODO write a loop for all of the params
     print 'Training and scoring models...'
     train_and_score_model(X, y, case_ids, 'baseline', train_pct=TRAIN_PCT, 
-                          reg_min_log10=None, reg_max_log10=None, scoring=None, regularization_type=None,
+                          reg_min_log10=None, reg_max_log10=None, scoring=None, feature_reduction_type=None,
                           result_path=RESULT_PATH)
     train_and_score_model(X, y, case_ids, 'logistic', train_pct=TRAIN_PCT,
                           reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, feature_reduction_type=FEATURE_REDUCTION_TYPE,
@@ -262,7 +275,7 @@ def main():
 
     # TODO P0 Make regularization type something that varies in the pipline
 
-    # TODO P0 Create bar charts to visualize which classifiers are better
+    # TODO P0 Charlie Connect charts to real data
 
     # TODO P1.0 Print top 50 most-used N-Grams for each classifier
 
