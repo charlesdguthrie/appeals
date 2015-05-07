@@ -210,6 +210,8 @@ def train_and_score_model(X, y, case_ids, model,
         #Save these to variables so the log can access
         grid_scores = fitted_model.grid_scores_
         best_estimator = fitted_model.best_estimator_
+        best_params = fitted_model.best_params_
+        best_score = fitted_model.best_score_
 
         print 'Fitting Complete!\n'
         print 'best estimator:', fitted_model.best_estimator_
@@ -306,7 +308,7 @@ def main():
     # http://scikit-learn.org/stable/auto_examples/model_selection/plot_confusion_matrix.html#example-model-selection-plot-confusion-matrix-py
 
     # TODO P2 Look into using pipeline system for setting up experiments
-    # THis will allows us to try different data sizes, data prep, and hyper params. 
+    # THis will allows us to try differentsssata sizes, data prep, and hyper params. 
     # Example: http://scikit-learn.org/stable/auto_examples/model_selection/grid_search_text_feature_extraction.html#example-model-selection-grid-search-text-feature-extraction-py
 
     # TODO P2 try other model-specific cross validation techniques
