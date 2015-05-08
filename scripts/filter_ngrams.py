@@ -2,18 +2,19 @@
 
 
 # HPC Files
-#VOCAB_DATA_DIR = '/scratch/akp258/ml_input_data/vocab_map_text'
-#NGRAM_ID_COUNTS_FILE = '/scratch/akp258/ml_input_data/total_ngram_counts.p.15466'
-#NUM_VOCAB_SHARDS = 470
-#COUNT_CUTOFF = 50
-#OUTPUT_FILE_PREFIX = '/scratch/akp258/ml_output_data/filtered_vocab_map.p'
+VOCAB_DATA_DIR = '/scratch/akp258/ml_input_data/vocab_map_text'
+NGRAM_ID_COUNTS_FILE = '/scratch/akp258/ml_input_data/total_ngram_counts.p.15466'
+#TODO TESTING NGRAM_ID_COUNTS_FILE = '/scratch/akp258/ml_input_data/total_ngram_counts.p.125'
+NUM_VOCAB_SHARDS = 1390
+COUNT_CUTOFF = 50
+OUTPUT_FILE_PREFIX = '/scratch/akp258/ml_output_data/filtered_vocab_map.p'
 
 # Alex local files
-VOCAB_DATA_DIR = '/Users/pinesol/mlcs_data/vocab_map_test'
-NGRAM_ID_COUNTS_FILE = '/Users/pinesol/mlcs_data/total_ngram_counts.p.125'
-NUM_VOCAB_SHARDS = 2
-COUNT_CUTOFF = 2 
-OUTPUT_FILE_PREFIX = '/tmp/vocab_map.p'
+#VOCAB_DATA_DIR = '/Users/pinesol/mlcs_data/vocab_map_test'
+#NGRAM_ID_COUNTS_FILE = '/Users/pinesol/mlcs_data/total_ngram_counts.p.125'
+#NUM_VOCAB_SHARDS = 2
+#COUNT_CUTOFF = 2 
+#OUTPUT_FILE_PREFIX = '/tmp/vocab_map.p'
 
 
 import cPickle as pickle
@@ -25,12 +26,17 @@ def read_ngram_file(ngram_filepath):
     with open(ngram_filepath, 'r') as f:
         for line in f:
             line = line.strip() # ('a',1)
-            if not len(line) >= 7:
+            if len(line) < 8 or not (line[0] == "(" and line[-1] == ")"):
                 print 'skipping invalid line:', line
-                continue
-            assert (line[:3] == "(u'" or line[:3] == "(u\"") and line[-1:] == ")", line
+                continue            
             ngram, id = line.split(", ")
-            ngram = unicode(ngram[3:-1])
+            if ngram[:3] == "(u'" or ngram[:3] == '(u"':
+                ngram = unicode(ngram[3:-1])
+            elif ngram[:2] == "('" or ngram[:2] == '("':
+                ngram = unicode(ngram[2:-1])
+            else:
+                print 'skipping invalid line:', line
+                continue                
             id = id[:-1]
             id_ngram_map[id] = ngram
     return id_ngram_map
