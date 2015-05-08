@@ -90,7 +90,7 @@ def log_results(locals_dict,log_path):
     #Remove raw data from local_vars_dict
     for key in ('X','y','case_ids','X_train', 'y_train', 'case_ids_train', 
         'X_test', 'y_test', 'case_ids_test',
-        'classifier'):
+        'classifier','fitted_model'):
         if key in log_items:
             del log_items[key]
 
@@ -105,6 +105,7 @@ def log_results(locals_dict,log_path):
     #write to results log
     pickle.dump( log, open( log_path, "wb" ) )
 
+    print "*************LOG************",log
     return log
 
 def log_to_csv(log_path,csv_path):
@@ -149,11 +150,14 @@ def train_and_score_model(X, y, case_ids, model,
     '''
     start_time = time.time()
 
+    num_cases = X.shape[0]
+    num_features = X.shape[1]
+
     print '\nFitting New Model'
     print 'Model:', model
     print 'Feature Matrix Info:'
-    print '  Number of cases', X.shape[0]
-    print '  Number of features', X.shape[1]
+    print '  Number of cases', num_cases
+    print '  Number of features', num_features
     print 'Training percentage', train_pct
     print 'Scoring used:', scoring
     if reg_min_log10 and reg_max_log10:
@@ -207,7 +211,9 @@ def train_and_score_model(X, y, case_ids, model,
         fitted_model.fit(X_train, y_train)
 
         #Save these to variables so the log can access
-        grid_scores = fitted_model.grid_scores_
+        grid_scores=[]
+        for grid in fitted_model.grid_scores_:
+            grid_scores.append({'parameters': grid.parameters, 'score':grid.mean_validation_score})
         best_estimator = fitted_model.best_estimator_
         best_params = fitted_model.best_params_
         best_score = fitted_model.best_score_
@@ -220,10 +226,10 @@ def train_and_score_model(X, y, case_ids, model,
     total_time = time.time() - start_time
     print 'Total time:', total_time
 
-    print "Training Accuracy"
     train_accuracy = print_accuracy_info(fitted_model.predict(X_train), y_train)
-    print "Testing Accuracy"
+    print "Training Accuracy",train_accuracy
     test_accuracy = print_accuracy_info(fitted_model.predict(X_test), y_test)
+    print "Testing Accuracy",test_accuracy
 
     #log parameters and output and return log
     return log_results(locals(),result_path)
@@ -244,8 +250,8 @@ def main():
     #OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
     #RESULT_PATH = '../results/model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
 
-    NUM_OPINION_SHARDS = 30 #1340
-    MIN_REQUIRED_COUNT = 20 #150
+    NUM_OPINION_SHARDS = 100 #1340
+    MIN_REQUIRED_COUNT = 20 #50
     USE_TFIDF = True
 
     # Model params
