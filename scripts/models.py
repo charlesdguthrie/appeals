@@ -69,16 +69,20 @@ def print_accuracy_info(y_pred, y_true):
     print 'Percent Accuracy: %0.3f%%' % (100 * accuracy)
     return accuracy
 
-def log_results(locals_dict,log_path):
+def log_results(locals_dict,log_path,parameters_dict):
     '''
     Save model parameters, accuracy, and training time as a dict and append to pickled log file
+    Also pulls parameters from parameters_dict if it's there
     Args:
         locals_dict: dictionary of variables in parent function
         log_path: path to pickled log file
+        parameters_dict: dictionary from parameters loaded into load_data
         
     Returns: None
     '''
-    log_items = locals_dict
+    log_items = locals_dict.copy()
+    if parameters_dict:
+        log_items.update(parameters_dict)
     
     #read results log
     try:
@@ -105,9 +109,6 @@ def log_results(locals_dict,log_path):
     #write to results log
     pickle.dump( log, open( log_path, "wb" ) )
 
-    print "*************LOG************",log
-    return log
-
 def log_to_csv(log_path,csv_path):
     '''
     Convert log pickle to a csv.  Dict keys become columns
@@ -131,7 +132,7 @@ def log_to_csv(log_path,csv_path):
 
 def train_and_score_model(X, y, case_ids, model,
                           train_pct, reg_min_log10, reg_max_log10, scoring, feature_reduction_type,
-                          result_path, description):
+                          result_path, description,parameters_dict):
     '''
     Train and score a model
     Args:
@@ -232,7 +233,7 @@ def train_and_score_model(X, y, case_ids, model,
     print "Testing Accuracy",test_accuracy
 
     #log parameters and output and return log
-    return log_results(locals(),result_path)
+    return log_results(locals(),result_path,parameters_dict)
 
 def main():
     # HPC Params
@@ -246,13 +247,15 @@ def main():
     #RESULT_PATH = '/tmp/model_results.pkl'
 
     # Charlie Params
-    #INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
-    #OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
-    #RESULT_PATH = '../results/model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
+    INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
+    OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
+    RESULT_PATH = '../results/model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
 
-    NUM_OPINION_SHARDS = 100 #1340
-    MIN_REQUIRED_COUNT = 20 #50
+    NUM_OPINION_SHARDS = 10 #1340
+    MIN_REQUIRED_COUNT = 1000 #50
     USE_TFIDF = True
+    CODED_FEATURE_NAMES = 'geniss'
+
 
     # Model params
     TRAIN_PCT = 0.75
@@ -268,26 +271,32 @@ def main():
 
     print 'Experiment:', DESCRIPTION
 
-    X, case_ids, y = jd.load_data(INPUT_DATA_DIR, OUTPUT_DATA_DIR,
-                                  NUM_OPINION_SHARDS, MIN_REQUIRED_COUNT, USE_TFIDF)
+    X, case_ids, y,PARAMETERS_DICT = jd.load_data(INPUT_DATA_DIR, OUTPUT_DATA_DIR,
+                                  NUM_OPINION_SHARDS, MIN_REQUIRED_COUNT,
+                                  USE_TFIDF, CODED_FEATURE_NAMES)
 
     # TODO write a loop for all of the params
     print 'Training and scoring models...'
     train_and_score_model(X, y, case_ids, 'baseline', train_pct=TRAIN_PCT, 
                           reg_min_log10=None, reg_max_log10=None, scoring=None, feature_reduction_type=FEATURE_REDUCTION_TYPE,
-                          result_path=RESULT_PATH, description=DESCRIPTION)
+                          result_path=RESULT_PATH, description=DESCRIPTION,
+                          parameters_dict = PARAMETERS_DICT)
     train_and_score_model(X, y, case_ids, 'logistic', train_pct=TRAIN_PCT,
                           reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, feature_reduction_type=FEATURE_REDUCTION_TYPE,
-                          result_path=RESULT_PATH, description=DESCRIPTION)
-    train_and_score_model(X, y, case_ids, 'svm', train_pct=TRAIN_PCT,
-                          reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, feature_reduction_type=FEATURE_REDUCTION_TYPE,
-                          result_path=RESULT_PATH, description=DESCRIPTION)
+                          result_path=RESULT_PATH, description=DESCRIPTION,
+                          parameters_dict = PARAMETERS_DICT)
     train_and_score_model(X, y, case_ids, 'naive_bayes', train_pct=TRAIN_PCT,
                           reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, feature_reduction_type=FEATURE_REDUCTION_TYPE,
-                          result_path=RESULT_PATH, description=DESCRIPTION)
+                          result_path=RESULT_PATH, description=DESCRIPTION,
+                          parameters_dict = PARAMETERS_DICT)
     train_and_score_model(X, y, case_ids, 'bernoulli_bayes', train_pct=TRAIN_PCT,
                           reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, feature_reduction_type=FEATURE_REDUCTION_TYPE,
-                          result_path=RESULT_PATH, description=DESCRIPTION)
+                          result_path=RESULT_PATH, description=DESCRIPTION,
+                          parameters_dict = PARAMETERS_DICT)
+    train_and_score_model(X, y, case_ids, 'svm', train_pct=TRAIN_PCT,
+                          reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, feature_reduction_type=FEATURE_REDUCTION_TYPE,
+                          result_path=RESULT_PATH, description=DESCRIPTION,
+                          parameters_dict = PARAMETERS_DICT)
 
     # TODO P0 Make regularization type something that varies in the pipline
 
