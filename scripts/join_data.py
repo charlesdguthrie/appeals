@@ -258,6 +258,19 @@ def sort_case_lists(cases_df, rows_ngram_counts, case_ids):
 
     return rows_ngram_counts, case_ids
 
+def filter_cases_df(cases_df,case_ids):
+    """
+    Pares down the cases dataframe, which has coded data,
+    to match the number and order of the case_ids list.
+    args:
+      cases_df: A dataframe containing the case variables.
+      case_ids: list of sorted case_ids
+    returns:
+      filtered_cases_df: Dataframe containing the sorted, filtered case variables
+    """
+    foo = cases_df.set_index('caseid')
+    filtered_cases_df = foo.loc[case_ids,:]
+    return filtered_cases_df
 
 def get_coded_data(cases_df, case_ids, coded_feature_names):
     """
@@ -271,6 +284,7 @@ def get_coded_data(cases_df, case_ids, coded_feature_names):
     returns:
       valences: np array of valences
       coded_feature_array: np array of coded features
+      filtered_cases_df: Dataframe containing the sorted, filtered case variables
     """
     UNKNOWN_VALENCE = 0
     NEUTRAL_VALENCE = 2
@@ -312,9 +326,12 @@ def get_coded_data(cases_df, case_ids, coded_feature_names):
         coded_feature_array = enc.fit_transform(np.array(coded_feature_list))
         print "Coded Feature Array shape: ", coded_feature_array.shape
     else: 
-        coded_feature_array = []
+        coded_feature_array = np.array([])
 
-    return np.array(valences), coded_feature_array
+    #Filter case df
+    filtered_case_df = filter_cases_df(cases_df,case_ids)
+
+    return np.array(valences),coded_feature_array,filtered_case_df
 
 
 def construct_sparse_opinion_matrix(cases_df, opinion_data_dir,
@@ -348,6 +365,7 @@ def construct_sparse_opinion_matrix(cases_df, opinion_data_dir,
         sparse_feature_matrix.
       valences: A list of valences as ints, with the unknown valences (0) 
         replaced with the neutral valence (2).
+      filtered_cases_df: Dataframe containing the sorted, filtered case variables 
       ngram_ids: The list of ngram IDs corresponding to the columns of 
         sparse_feature_matrix. If coded_feature_names are included, those
         features won't be included in this list.
@@ -364,7 +382,7 @@ def construct_sparse_opinion_matrix(cases_df, opinion_data_dir,
     rows_ngram_counts, case_ids = sort_case_lists(cases_df, rows_ngram_counts, 
                                                   case_ids)
 
-    valences, coded_feature_matrix = get_coded_data(cases_df, case_ids, coded_feature_names)
+    valences,coded_feature_matrix,filtered_cases_df = get_coded_data(cases_df, case_ids,coded_feature_names)
 
     print 'Building sparse matrix...'
     # Make sure the matrics created by this vectorizer are sparse.
@@ -380,19 +398,19 @@ def construct_sparse_opinion_matrix(cases_df, opinion_data_dir,
         transformer = sklearn.feature_extraction.text.TfidfTransformer()
         sparse_feature_matrix = transformer.fit_transform(sparse_feature_matrix)
 
-    if coded_feature_names is not None:
+    if coded_feature_matrix.shape[0]>0:
         print 'Including coded features:', coded_feature_names
         assertion_string = "Matrices have different number of rows.  N-gram matrix has %r, coded_feature_matrix has %r" %(sparse_feature_matrix.shape[0],coded_feature_matrix.shape[0])
         assert sparse_feature_matrix.shape[0]==coded_feature_matrix.shape[0], assertion_string
         sparse_feature_matrix = scipy.sparse.hstack([sparse_feature_matrix,coded_feature_matrix],format='csr')
 
-    assert sparse_feature_matrix.get_shape()[0] == len(case_ids)
+    assert sparse_feature_matrix.shape[0] == len(case_ids)
     assert len(valences) == len(case_ids)
 
     print 'shape: ', sparse_feature_matrix.get_shape()
     print 'number of cases', len(case_ids)
 
-    return sparse_feature_matrix, case_ids, valences, ngram_ids
+    return sparse_feature_matrix, case_ids, valences,filtered_cases_df, ngram_ids
 
 
 def build_filenames_from_params(output_data_dir, num_shards, min_required_count,
@@ -419,21 +437,24 @@ def build_filenames_from_params(output_data_dir, num_shards, min_required_count,
         output_data_dir, num_shards, min_required_count)
     case_ids_filename = '%s/case_ids.shards.p.%d.mincount.%d' % (
         output_data_dir, num_shards, min_required_count)
+    cases_df_filename = '%s/cases_df.shards.p.%d.mincount.%d' % (
+        output_data_dir, num_shards, min_required_count)
     ngram_ids_filename = '%s/ngram_ids.shards.p.%d.mincount.%d' % (
         output_data_dir, num_shards, min_required_count)
     if tfidf:
         feature_matrix_filename += '.tfidf'
         case_ids_filename += '.tfidf'
+        cases_df_filename += '.tfidf'
     if coded_feature_names is not None:
-        for name in coded_feature_names:
-            feature_matrix_filename += "."+name
-            case_ids_filename += "."+name       
-    return feature_matrix_filename, case_ids_filename, ngram_ids_filename
+        feature_matrix_filename += "."+str(coded_feature_names)
+        case_ids_filename += "."+str(coded_feature_names)
+        cases_df_filename += "."+str(coded_feature_names)     
+    return feature_matrix_filename, case_ids_filename, cases_df_filename, ngram_ids_filename
 
 
 def load_data(input_data_dir, output_data_dir,
               num_opinion_shards, min_required_count,
-              tfidf,coded_feature_names):
+              tfidf,coded_feature_names,drop_mixed):
     """
     Looks to see if the file containing the feature matrix and target labels 
     exists, along with the file containing their corresponding case IDs. If so, 
@@ -453,6 +474,7 @@ def load_data(input_data_dir, output_data_dir,
       tfidf: Boolean. If set, the returned feature matrix has been normalized
         using TF-IDF.
       coded_feature_names: None or list of features to include from the coded data set.
+      drop_mixed: whether to remove mixed or unknown labels
 
     Returns:
       sparse_feature_matrix: A scipy.sparse.csr_matrix with n-gram counts.
@@ -479,27 +501,29 @@ def load_data(input_data_dir, output_data_dir,
         parameters_dict[i] = locals()[i]
 
     # Look to see if the data files have already been saved to disk.
-    feature_matrix_filename, case_ids_filename, ngram_ids_filename = build_filenames_from_params(
+    feature_matrix_filename, case_ids_filename,cases_df_filename, ngram_ids_filename = build_filenames_from_params(
         output_data_dir, num_opinion_shards, min_required_count, tfidf,coded_feature_names)
 
-    if os.path.isfile(feature_matrix_filename) and os.path.isfile(case_ids_filename):
+    if os.path.isfile(feature_matrix_filename) and os.path.isfile(case_ids_filename) and os.path.isfile(cases_df_filename):
         with open(feature_matrix_filename, 'rb') as f:
             sparse_feature_matrix, valences = sklearn.datasets.load_svmlight_file(f)
         with open(case_ids_filename, 'rb') as f:
             case_ids = pickle.load(f)
+        with open(cases_df_filename, 'rb') as f:
+            filtered_cases_df = pickle.load(f)
         with open(ngram_ids_filename, 'rb') as f:
             ngram_ids = pickle.load(f)
-        print 'Data loaded from', feature_matrix_filename, ',', case_ids_filename, ',', ngram_ids_filename
+        print 'Data loaded from', feature_matrix_filename, ',', case_ids_filename,',' ,cases_df_filename,',', ngram_ids_filename
     else:
         print 'Constructing data from scratch...'
         print 'Reading input data from from:', input_data_dir
-        cases_df = extract_metadata.extract_metadata(input_data_dir + '/' + CASE_DATA_FILENAME)
+        cases_df = extract_metadata.extract_metadata(input_data_dir + '/' + CASE_DATA_FILENAME,drop_mixed)
         opinion_data_dir = input_data_dir + '/' + OPINION_DATA_DIR
         # <HACK> to save the total counts dict to a file
         global GLOBAL_INPUT_DATA_DIR
         GLOBAL_INPUT_DATA_DIR = input_data_dir
         # </HACK>
-        sparse_feature_matrix, case_ids, valences, ngram_ids = construct_sparse_opinion_matrix(
+        sparse_feature_matrix, case_ids, valences,filtered_cases_df, ngram_ids = construct_sparse_opinion_matrix(
             cases_df, opinion_data_dir, 
             num_opinion_shards, min_required_count, 
             tfidf, coded_feature_names)
@@ -515,7 +539,7 @@ def load_data(input_data_dir, output_data_dir,
         print 'NGram IDs saved as %s' % ngram_ids_filename
 
     print 'Total time spent building data:', time.time() - start_time
-    return sparse_feature_matrix, case_ids, valences, parameters_dict, ngram_ids
+    return sparse_feature_matrix, case_ids, valences, filtered_cases_df,parameters_dict, ngram_ids
 
 
 if __name__ == '__main__':
@@ -523,6 +547,8 @@ if __name__ == '__main__':
     num_opinion_shards = 50 #1340
     min_required_count = 4 #150
     tfidf = True
+    coded_feature_names=None
+    drop_mixed = True
     input_data_dir = '/Users/pinesol/mlcs_data'
     output_data_dir = '/tmp'
 
@@ -532,5 +558,4 @@ if __name__ == '__main__':
               output_data_dir,
               num_opinion_shards,
               min_required_count,
-              tfidf,
-              coded_feature_names)
+              tfidf,coded_feature_names,drop_mixed)

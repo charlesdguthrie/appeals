@@ -1,7 +1,8 @@
-
+#our own files
 import extract_metadata
 import join_data as jd
 import ngram_dictionary
+import results
 
 import pandas as pd
 import numpy as np
@@ -10,6 +11,7 @@ import time
 import sys
 from datetime import datetime
 
+#sklearn stuff
 from sklearn.feature_selection import chi2, SelectFpr
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
@@ -31,6 +33,13 @@ class MajorityClassifier:
     def predict(self,X_test):
         return [self.majority] * X_test.shape[0]
 
+def cut_stratum(X_full,y_full,filtered_cases_df,column,value):
+    idx = np.where(filtered_cases_df[column]==value)[0]
+    case_ids = filtered_cases_df.iloc[idx].index.tolist()
+    X = X_full[idx,:]
+    y = y_full[idx]
+    assert X.shape[0]==len(y), "cut_stratum failed: X and y not same shape"
+    return X,y,case_ids
 
 def train_test_split(X,y, ordered_case_ids,pct_train):
     train_rows = int(pct_train*len(y))
@@ -40,6 +49,8 @@ def train_test_split(X,y, ordered_case_ids,pct_train):
     X_test = X[train_rows:]
     case_ids_train = ordered_case_ids[:train_rows]
     case_ids_test = ordered_case_ids[train_rows:]
+    assert X_train.shape[1]>0, "X_train has no features"
+    assert X_test.shape[1]>0, "X_test has no features"
     return X_train,y_train,case_ids_train,X_test,y_test,case_ids_test
 
 
@@ -161,6 +172,8 @@ def train_and_score_model(X, y, case_ids, model,
 
     num_cases = X.shape[0]
     num_features = X.shape[1]
+    MIN_SAMPLES_FOR_MODEL = 30
+    MIN_SAMPLES_FOR_BASELINE = 4
 
     print '\nFitting New Model'
     print 'Model:', model
@@ -179,9 +192,20 @@ def train_and_score_model(X, y, case_ids, model,
     pipeline_steps = list()
     param_grid = dict()
 
-    if model == 'baseline':
+    if X_train.shape[0]<MIN_SAMPLES_FOR_BASELINE:
+        print 'Failed to build model. There are only %r training samples, which is fewer than the minimum of %r' %(X_train.shape[0],MIN_SAMPLES_FOR_BASELINE)
+        return log_results(locals(),result_path,parameters_dict)
+    elif model == 'baseline':
         fitted_model = MajorityClassifier()
         fitted_model.fit(X_train, y_train)
+    elif len(np.unique(y_train))==1:
+        print 'Resorting to baseline classifier, because there is only one class'
+        fitted_model = MajorityClassifier()
+        fitted_model.fit(X_train, y_train) 
+    elif X_train.shape[0]<MIN_SAMPLES_FOR_MODEL:
+        print 'Resorting to baseline classifier, because there are only %r training samples, which is fewer than the minimum of %r' %(X_train.shape[0],MIN_SAMPLES_FOR_MODEL)
+        fitted_model = MajorityClassifier()
+        fitted_model.fit(X_train, y_train) 
     else:
         # Feature reduction step
         if feature_reduction_type == 'chi2':
@@ -215,8 +239,7 @@ def train_and_score_model(X, y, case_ids, model,
         pipeline_steps.append(('classifier', classifier))
 
         print 'Running Model Pipeline...'
-        fitted_model = GridSearchCV(Pipeline(pipeline_steps), scoring=scoring, param_grid=param_grid, 
-                                    verbose=1, n_jobs=-1)
+        fitted_model = GridSearchCV(Pipeline(pipeline_steps), scoring=scoring, param_grid=param_grid, verbose=1, n_jobs=-1)
         fitted_model.fit(X_train, y_train)
 
         #Save these to variables so the log can access
@@ -226,12 +249,17 @@ def train_and_score_model(X, y, case_ids, model,
         best_estimator = fitted_model.best_estimator_
         best_params = fitted_model.best_params_
         best_score = fitted_model.best_score_
-
         print 'Fitting Complete!\n'
         print 'best estimator:', fitted_model.best_estimator_
         print 'best params:', fitted_model.best_params_
         print 'best score from that estimator:', fitted_model.best_score_
-        ngram_dictionary.print_important_ngrams(ngrams, fitted_model.best_estimator_.named_steps['classifier'].coef_, 3) # TODO num labels might change...
+
+        # Print the most important n-grams
+        important_ngrams_per_label = ngram_dictionary.get_important_ngrams(
+            ngrams, fitted_model.best_estimator_.named_steps['classifier'].coef_)
+        for i, important_ngrams in enumerate(important_ngrams_per_label):
+            important_ngrams_str = "\n  ".join(important_ngrams)
+            print("Label %s:\n  %s" % (i, important_ngrams_str))
 
     total_time = time.time() - start_time
     print 'Total time:', total_time
@@ -243,6 +271,38 @@ def train_and_score_model(X, y, case_ids, model,
 
     #log parameters and output and return log
     return log_results(locals(),result_path,parameters_dict)
+
+def run_models(X,y,case_ids,
+        train_pct,reg_min_log10,reg_max_log10,
+        scoring,feature_reduction_type,
+        result_path,description,parameters_dict,ngrams):
+
+    print 'Training and scoring models...'
+    train_and_score_model(X, y, case_ids, 'baseline', train_pct=train_pct, 
+                          reg_min_log10=None, reg_max_log10=None, scoring=None, feature_reduction_type=feature_reduction_type,
+                          result_path=result_path, description=description,
+                          parameters_dict = parameters_dict,ngrams=ngrams)
+    for model in ['naive_bayes','bernoulli_bayes','logistic','svm']:
+        train_and_score_model(X, y, case_ids, model, train_pct=train_pct,
+                          reg_min_log10=reg_min_log10, reg_max_log10=reg_max_log10, scoring=scoring, feature_reduction_type=feature_reduction_type,
+                          result_path=result_path, description=description,
+                          parameters_dict = parameters_dict,ngrams=ngrams)
+
+def stratify_and_run_models(strat_column,X_full, y_full,filtered_cases_df,
+                            train_pct,reg_min_log10,reg_max_log10,
+                            scoring,feature_reduction_type,
+                            result_path,description,parameters_dict,ngrams):
+    strat_column_vals = sorted(filtered_cases_df[strat_column].unique())
+    for val in strat_column_vals:
+        X,y,case_ids = cut_stratum(X_full, y_full,filtered_cases_df,strat_column,val)
+        parameters_dict['strat_column']=strat_column
+        parameters_dict['strat_value']=val
+
+        print "\n\nRunning models for stratum: %s = %s" %(strat_column,val)
+        run_models(X, y, case_ids, train_pct=train_pct,
+                          reg_min_log10=reg_min_log10, reg_max_log10=reg_max_log10, scoring=scoring, feature_reduction_type=feature_reduction_type,
+                          result_path=result_path, description=description,
+                          parameters_dict = parameters_dict,ngrams=ngrams)
 
 def main():
     # HPC Params
@@ -263,52 +323,74 @@ def main():
     #RESULT_PATH = '../results/model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
     #NGRAM_DICT_FILEPATH = 'test_data/vocab_map.p'
 
+    #Load_data params
     NUM_OPINION_SHARDS = 10 #1340
     MIN_REQUIRED_COUNT = 2
     USE_TFIDF = True
     CODED_FEATURE_NAMES = None # TODO 'geniss'
+    DROP_MIXED = True
 
     # Model params
+    STRAT_COLUMN='geniss'
     TRAIN_PCT = 0.75
     REG_MIN_LOG10 = -2
     REG_MAX_LOG10 = 2
     SCORING = 'accuracy'
     # NOTE: this will be too slow to run locally if feature reduction is enabled
-    FEATURE_REDUCTION_TYPE = 'chi2' # TODO try 'chi2' or l1svc
+    FEATURE_REDUCTION_TYPE = None # TODO try 'chi2' or l1svc
 
-    DESCRIPTION = '.'.join([datetime.now().strftime('%Y%m%d-%H%M%S'), 'min_required_count', str(MIN_REQUIRED_COUNT), 
-                            FEATURE_REDUCTION_TYPE if FEATURE_REDUCTION_TYPE else 'all_features', SCORING]) 
+    DESCRIPTION = '.'.join([
+        datetime.now().strftime('%Y%m%d-%H%M%S'), 'min_required_count', str(MIN_REQUIRED_COUNT), 
+        FEATURE_REDUCTION_TYPE if FEATURE_REDUCTION_TYPE else 'all_features', 
+        SCORING,
+        'stratify_by_'+STRAT_COLUMN if STRAT_COLUMN else ''
+        ]) 
     RESULT_PATH = RESULT_PATH + '.' + DESCRIPTION
 
     print 'Experiment:', DESCRIPTION
 
-    X, case_ids, y, PARAMETERS_DICT, ngram_ids = jd.load_data(INPUT_DATA_DIR, OUTPUT_DATA_DIR,
-                                                              NUM_OPINION_SHARDS, MIN_REQUIRED_COUNT,
-                                                              USE_TFIDF, CODED_FEATURE_NAMES)
+    #Load Data
+    X, case_ids, y,filtered_cases_df,PARAMETERS_DICT,ngram_ids = jd.load_data(
+                                  INPUT_DATA_DIR, OUTPUT_DATA_DIR,
+                                  NUM_OPINION_SHARDS, MIN_REQUIRED_COUNT,
+                                  USE_TFIDF, CODED_FEATURE_NAMES,DROP_MIXED)
+
     ngrams = ngram_dictionary.ngram_ids_to_strings(NGRAM_DICT_FILEPATH, ngram_ids)
 
-    # TODO write a loop for all of the params
-    print 'Training and scoring models...'
-    train_and_score_model(X, y, case_ids, 'baseline', train_pct=TRAIN_PCT, 
-                          reg_min_log10=None, reg_max_log10=None, scoring=None, feature_reduction_type=FEATURE_REDUCTION_TYPE,
-                          result_path=RESULT_PATH, description=DESCRIPTION,
-                          parameters_dict = PARAMETERS_DICT, ngrams=ngrams)
-    train_and_score_model(X, y, case_ids, 'logistic', train_pct=TRAIN_PCT,
-                          reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, feature_reduction_type=FEATURE_REDUCTION_TYPE,
-                          result_path=RESULT_PATH, description=DESCRIPTION,
-                          parameters_dict = PARAMETERS_DICT, ngrams=ngrams)
-    train_and_score_model(X, y, case_ids, 'naive_bayes', train_pct=TRAIN_PCT,
-                          reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, feature_reduction_type=FEATURE_REDUCTION_TYPE,
-                          result_path=RESULT_PATH, description=DESCRIPTION,
-                          parameters_dict = PARAMETERS_DICT, ngrams=ngrams)
-    train_and_score_model(X, y, case_ids, 'bernoulli_bayes', train_pct=TRAIN_PCT,
-                          reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, feature_reduction_type=FEATURE_REDUCTION_TYPE,
-                          result_path=RESULT_PATH, description=DESCRIPTION,
-                          parameters_dict = PARAMETERS_DICT, ngrams=ngrams)
-    train_and_score_model(X, y, case_ids, 'svm', train_pct=TRAIN_PCT,
-                          reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, feature_reduction_type=FEATURE_REDUCTION_TYPE,
-                          result_path=RESULT_PATH, description=DESCRIPTION,
-                          parameters_dict = PARAMETERS_DICT, ngrams=ngrams)
+    #Run models, either with stratified data or not
+    if STRAT_COLUMN is None:
+        run_models(X,y,case_ids,train_pct=TRAIN_PCT,
+                    reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, 
+                    scoring=SCORING,
+                    feature_reduction_type=FEATURE_REDUCTION_TYPE,
+                    result_path=RESULT_PATH, description=DESCRIPTION,
+                    parameters_dict = PARAMETERS_DICT,ngrams=ngrams)
+
+        RESULTS_CSV_PATH=RESULT_PATH+".csv"
+        df = results.get_results_df(RESULT_PATH)
+        df.to_csv(RESULTS_CSV_PATH)
+        print "Stratified model results saved to %s" %RESULTS_CSV_PATH
+        results.best_model_accuracy_bars(df,'best_score',CONTEXT)
+        results.best_model_accuracy_bars(df,'test_accuracy',CONTEXT)
+    else:
+        stratify_and_run_models(STRAT_COLUMN,X,y,filtered_cases_df,train_pct=TRAIN_PCT,
+                    reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, 
+                    scoring=SCORING,
+                    feature_reduction_type=FEATURE_REDUCTION_TYPE,
+                    result_path=RESULT_PATH, description=DESCRIPTION,
+                    parameters_dict = PARAMETERS_DICT,ngrams=ngrams)
+
+        RESULTS_CSV_PATH=RESULT_PATH+".csv"
+        CONTEXT='notebook'
+
+        sdf=results.get_results_df(RESULT_PATH)
+        print "Stratified model results saved to %s" %RESULTS_CSV_PATH
+        sdf.to_csv(RESULTS_CSV_PATH)
+        results.print_weighted_accuracy(sdf)
+
+
+
+    # TODO P0 Make regularization type something that varies in the pipline
 
     # TODO P0 Charlie Connect charts to real data
 

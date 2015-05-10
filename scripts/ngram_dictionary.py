@@ -14,12 +14,9 @@ def ngram_ids_to_strings(ngram_pickle_filepath, ngram_ids):
 
 # note don't know how to map the label index to the actual label
 # They're probably in sorted order, though.
-def print_important_ngrams(ngrams, coefficients, num_labels):
-    # If there are only two labels, there is only one vector of coefs
-    if num_labels == 2:
-        num_labels = 1
-    for i in range(num_labels):
-        top10 = np.argsort(coefficients[i])[-10:] # TODO sort by absolute value?
-        best_features = [ngrams[j] for j in top10]
-        best_features_str = "\n  ".join(best_features)
-        print("Label %s:\n  %s" % (i, best_features_str))
+def get_important_ngrams(ngrams, coefficients_per_label):
+    most_important_ngrams_per_label = []
+    for coef_vec in coefficients_per_label:
+        top10 = np.argsort(coef_vec)[-10:] # TODO sort by absolute value?
+        most_important_ngrams_per_label.append([ngrams[j] for j in top10])
+    return most_important_ngrams_per_label
