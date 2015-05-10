@@ -255,13 +255,13 @@ def main():
     INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
     OUTPUT_DATA_DIR = '/tmp'
     RESULT_PATH = '/tmp/model_results.pkl'
-    NGRAM_DICT_FILEPATH = '/tmp/vocab_map.p' # TODO
+    NGRAM_DICT_FILEPATH = 'test_data/vocab_map.p'
 
     # Charlie Params
     #INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
     #OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
     #RESULT_PATH = '../results/model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
-    #NGRAM_DICT_FILEPATH = '' # TODO
+    #NGRAM_DICT_FILEPATH = 'test_data/vocab_map.p'
 
     NUM_OPINION_SHARDS = 10 #1340
     MIN_REQUIRED_COUNT = 2

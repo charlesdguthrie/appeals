@@ -8,6 +8,7 @@ def ngram_ids_to_strings(ngram_pickle_filepath, ngram_ids):
     print 'Reading in ngram dictionary', ngram_pickle_filepath
     with open(ngram_pickle_filepath, 'rb') as f:
         id_ngram_dict = pickle.load(f)
+        print 'Loading ngram dictionary with', len(id_ngram_dict), 'keys'
         return [id_ngram_dict.get(id, 'NOT FOUND') for id in ngram_ids]
 
 
