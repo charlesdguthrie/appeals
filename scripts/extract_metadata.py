@@ -1,7 +1,7 @@
 import pandas as pd
 from course_utils import trainTest
 
-def extract_metadata(inpath,drop_mixed):
+def extract_metadata(inpath):
     '''
     extracts list of judges, their vote valences, and whether they voted with the majority;
     as well as information about their decisions from case
@@ -26,9 +26,6 @@ def extract_metadata(inpath,drop_mixed):
     #merge labels, judges and decisions
     df2 = pd.concat([decisions,judges],axis=1)
     df2.drop_duplicates(subset='caseid',inplace=True)
-
-    if drop_mixed:
-        df2 = df2.loc[df2['direct1'].isin([1,3]),:]
 
     return df2
 

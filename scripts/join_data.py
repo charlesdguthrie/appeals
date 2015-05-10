@@ -454,7 +454,7 @@ def build_filenames_from_params(output_data_dir, num_shards, min_required_count,
 
 def load_data(input_data_dir, output_data_dir,
               num_opinion_shards, min_required_count,
-              tfidf,coded_feature_names,drop_mixed):
+              tfidf,coded_feature_names):
     """
     Looks to see if the file containing the feature matrix and target labels 
     exists, along with the file containing their corresponding case IDs. If so, 
@@ -474,7 +474,6 @@ def load_data(input_data_dir, output_data_dir,
       tfidf: Boolean. If set, the returned feature matrix has been normalized
         using TF-IDF.
       coded_feature_names: None or list of features to include from the coded data set.
-      drop_mixed: whether to remove mixed or unknown labels
 
     Returns:
       sparse_feature_matrix: A scipy.sparse.csr_matrix with n-gram counts.
@@ -517,7 +516,7 @@ def load_data(input_data_dir, output_data_dir,
     else:
         print 'Constructing data from scratch...'
         print 'Reading input data from from:', input_data_dir
-        cases_df = extract_metadata.extract_metadata(input_data_dir + '/' + CASE_DATA_FILENAME,drop_mixed)
+        cases_df = extract_metadata.extract_metadata(input_data_dir + '/' + CASE_DATA_FILENAME)
         opinion_data_dir = input_data_dir + '/' + OPINION_DATA_DIR
         # <HACK> to save the total counts dict to a file
         global GLOBAL_INPUT_DATA_DIR
@@ -548,7 +547,6 @@ if __name__ == '__main__':
     min_required_count = 4 #150
     tfidf = True
     coded_feature_names=None
-    drop_mixed = True
     input_data_dir = '/Users/pinesol/mlcs_data'
     output_data_dir = '/tmp'
 
@@ -558,4 +556,4 @@ if __name__ == '__main__':
               output_data_dir,
               num_opinion_shards,
               min_required_count,
-              tfidf,coded_feature_names,drop_mixed)
+              tfidf,coded_feature_names)

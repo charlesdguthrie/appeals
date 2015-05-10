@@ -41,6 +41,16 @@ def cut_stratum(X_full,y_full,filtered_cases_df,column,value):
     assert X.shape[0]==len(y), "cut_stratum failed: X and y not same shape"
     return X,y,case_ids
 
+def drop_mixed_labels(X_full,y_full,case_ids_full):
+    ix = np.in1d(y_full, [1,3])
+    #idx = list(np.where(ix)[0])
+    case_ids = list(np.array(case_ids_full)[ix])
+    X = X_full[ix,:]
+    y = y_full[ix]
+    assert X.shape[0]==len(y), "drop_mixed_labels failed: X and y not same shape"
+    assert X.shape[0]==len(case_ids), "drop_mixed_labels failed: X and cases_df not same shape"
+    return X,y,case_ids
+
 def train_test_split(X,y, ordered_case_ids,pct_train):
     train_rows = int(pct_train*len(y))
     y_train = np.array(y[:train_rows])
@@ -146,7 +156,7 @@ def log_to_csv(log_path,csv_path):
 
 def train_and_score_model(X, y, case_ids, model,
                           train_pct, reg_min_log10, reg_max_log10, scoring, feature_reduction_type,
-                          result_path, description, parameters_dict, ngrams):
+                          result_path, description, parameters_dict, ngrams,drop_mixed):
     '''
     Train and score a model
     Args:
@@ -162,6 +172,7 @@ def train_and_score_model(X, y, case_ids, model,
       ngrams: The list of ngram strings corresponding to the columns of 
         sparse_feature_matrix. If coded_feature_names were included, those
         features won't be included in this list.
+      drop_mixed: boolean. whether to remove mixed or unknown labels
 
     Returns:
         Model score
@@ -188,6 +199,9 @@ def train_and_score_model(X, y, case_ids, model,
 
     print 'Splitting data into training and testing...'
     X_train, y_train, case_ids_train, X_test, y_test, case_ids_test = train_test_split(X, y, case_ids, train_pct)
+
+    if drop_mixed==True:
+        X_train,y_train,case_ids_train = drop_mixed_labels(X_train,y_train,case_ids_train)
 
     pipeline_steps = list()
     param_grid = dict()
@@ -270,23 +284,23 @@ def train_and_score_model(X, y, case_ids, model,
 def run_models(X,y,case_ids,
         train_pct,reg_min_log10,reg_max_log10,
         scoring,feature_reduction_type,
-        result_path,description,parameters_dict,ngrams):
+        result_path,description,parameters_dict,ngrams,drop_mixed):
 
     print 'Training and scoring models...'
     train_and_score_model(X, y, case_ids, 'baseline', train_pct=train_pct, 
                           reg_min_log10=None, reg_max_log10=None, scoring=None, feature_reduction_type=feature_reduction_type,
                           result_path=result_path, description=description,
-                          parameters_dict = parameters_dict,ngrams=ngrams)
+                          parameters_dict = parameters_dict,ngrams=ngrams,drop_mixed=drop_mixed)
     for model in ['naive_bayes','bernoulli_bayes','logistic','svm']:
         train_and_score_model(X, y, case_ids, model, train_pct=train_pct,
                           reg_min_log10=reg_min_log10, reg_max_log10=reg_max_log10, scoring=scoring, feature_reduction_type=feature_reduction_type,
                           result_path=result_path, description=description,
-                          parameters_dict = parameters_dict,ngrams=ngrams)
+                          parameters_dict = parameters_dict,ngrams=ngrams,drop_mixed=drop_mixed)
 
 def stratify_and_run_models(strat_column,X_full, y_full,filtered_cases_df,
                             train_pct,reg_min_log10,reg_max_log10,
                             scoring,feature_reduction_type,
-                            result_path,description,parameters_dict,ngrams):
+                            result_path,description,parameters_dict,ngrams,drop_mixed):
     strat_column_vals = sorted(filtered_cases_df[strat_column].unique())
     for val in strat_column_vals:
         X,y,case_ids = cut_stratum(X_full, y_full,filtered_cases_df,strat_column,val)
@@ -297,7 +311,7 @@ def stratify_and_run_models(strat_column,X_full, y_full,filtered_cases_df,
         run_models(X, y, case_ids, train_pct=train_pct,
                           reg_min_log10=reg_min_log10, reg_max_log10=reg_max_log10, scoring=scoring, feature_reduction_type=feature_reduction_type,
                           result_path=result_path, description=description,
-                          parameters_dict = parameters_dict,ngrams=ngrams)
+                          parameters_dict = parameters_dict,ngrams=ngrams,drop_mixed=drop_mixed)
 
 def main():
     # HPC Params
@@ -323,9 +337,9 @@ def main():
     MIN_REQUIRED_COUNT = 2
     USE_TFIDF = True
     CODED_FEATURE_NAMES = None # TODO 'geniss'
-    DROP_MIXED = True
 
     # Model params
+    DROP_MIXED = True
     STRAT_COLUMN='geniss'
     TRAIN_PCT = 0.75
     REG_MIN_LOG10 = -2
@@ -348,8 +362,7 @@ def main():
     X, case_ids, y,filtered_cases_df,PARAMETERS_DICT,ngram_ids = jd.load_data(
                                   INPUT_DATA_DIR, OUTPUT_DATA_DIR,
                                   NUM_OPINION_SHARDS, MIN_REQUIRED_COUNT,
-                                  USE_TFIDF, CODED_FEATURE_NAMES,DROP_MIXED
-                                )
+                                  USE_TFIDF, CODED_FEATURE_NAMES)
 
     ngrams = ngram_dictionary.ngram_ids_to_strings(NGRAM_DICT_FILEPATH, ngram_ids)
 
@@ -360,7 +373,7 @@ def main():
                     scoring=SCORING,
                     feature_reduction_type=FEATURE_REDUCTION_TYPE,
                     result_path=RESULT_PATH, description=DESCRIPTION,
-                    parameters_dict = PARAMETERS_DICT,ngrams=ngrams)
+                    parameters_dict = PARAMETERS_DICT,ngrams=ngrams,drop_mixed=DROP_MIXED)
 
         RESULTS_CSV_PATH=RESULT_PATH+".csv"
         df = results.get_results_df(RESULT_PATH)
@@ -370,11 +383,11 @@ def main():
         results.best_model_accuracy_bars(df,'test_accuracy',CONTEXT)
     else:
         stratify_and_run_models(STRAT_COLUMN,X,y,filtered_cases_df,train_pct=TRAIN_PCT,
-                    reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, 
-                    scoring=SCORING,
-                    feature_reduction_type=FEATURE_REDUCTION_TYPE,
-                    result_path=RESULT_PATH, description=DESCRIPTION,
-                    parameters_dict = PARAMETERS_DICT,ngrams=ngrams)
+                                reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, 
+                                scoring=SCORING,
+                                feature_reduction_type=FEATURE_REDUCTION_TYPE,
+                                result_path=RESULT_PATH, description=DESCRIPTION,
+                                parameters_dict = PARAMETERS_DICT,ngrams=ngrams,drop_mixed=DROP_MIXED)
 
         RESULTS_CSV_PATH=RESULT_PATH+".csv"
         CONTEXT='notebook'
