@@ -1,10 +1,13 @@
+
+import extract_metadata
+import join_data as jd
+import ngram_dictionary
+
 import pandas as pd
 import numpy as np
 import cPickle as pickle
 import time
 import sys
-import extract_metadata
-import join_data as jd
 from datetime import datetime
 
 from sklearn.feature_selection import chi2, SelectFpr
@@ -132,18 +135,23 @@ def log_to_csv(log_path,csv_path):
 
 def train_and_score_model(X, y, case_ids, model,
                           train_pct, reg_min_log10, reg_max_log10, scoring, feature_reduction_type,
-                          result_path, description,parameters_dict):
+                          result_path, description, parameters_dict, ngrams):
     '''
     Train and score a model
     Args:
-        X,y,case_ids - your data.  X is a matrix, y is an array, case_ids is a list
-        model: string.  So far either 'baseline', 'logistic', or 'svm'
-        train_pct: float between 0 and 1.  Fraction of your subsample to use as training.
-        reg_min_log10, reg_max_log10: integers.  The low and high of your grid search for regularization parameter.
-        scoring: scoring method
-        feature_reduction_type: Either 'chi2', 'l1svc', or None.
-        result_path: The path of the filename to which the results should be written.
-        description: The experiment description, to be saved in the results file.
+      X,y,case_ids - your data.  X is a matrix, y is an array, case_ids is a list
+      model: string.  So far either 'baseline', 'logistic', or 'svm'
+      train_pct: float between 0 and 1.  Fraction of your subsample to use as training.
+      reg_min_log10, reg_max_log10: integers.  The low and high of your grid search for regularization parameter.
+      scoring: scoring method
+      feature_reduction_type: Either 'chi2', 'l1svc', or None.
+      result_path: The path of the filename to which the results should be written.
+      description: The experiment description, to be saved in the results file.
+      parameters_dict: dictionary of parameters, for debugging
+      ngrams: The list of ngram strings corresponding to the columns of 
+        sparse_feature_matrix. If coded_feature_names were included, those
+        features won't be included in this list.
+
     Returns:
         Model score
 
@@ -223,6 +231,7 @@ def train_and_score_model(X, y, case_ids, model,
         print 'best estimator:', fitted_model.best_estimator_
         print 'best params:', fitted_model.best_params_
         print 'best score from that estimator:', fitted_model.best_score_
+        ngram_dictionary.print_important_ngrams(ngrams, fitted_model.best_estimator_.named_steps['classifier'].coef_, 3) # TODO num labels might change...
 
     total_time = time.time() - start_time
     print 'Total time:', total_time
@@ -240,22 +249,24 @@ def main():
     #INPUT_DATA_DIR = '/scratch/akp258/ml_input_data'
     #OUTPUT_DATA_DIR = '/scratch/akp258/ml_output_data'
     #RESULT_PATH = '/scratch/akp258/ml_results/model_results.pkl'
+    #NGRAM_DICT_FILEPATH = '' # TODO
 
     # Alex Data params
-    #INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
-    #OUTPUT_DATA_DIR = '/tmp'
-    #RESULT_PATH = '/tmp/model_results.pkl'
+    INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
+    OUTPUT_DATA_DIR = '/tmp'
+    RESULT_PATH = '/tmp/model_results.pkl'
+    NGRAM_DICT_FILEPATH = '/tmp/vocab_map.p' # TODO
 
     # Charlie Params
-    INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
-    OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
-    RESULT_PATH = '../results/model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
+    #INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
+    #OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
+    #RESULT_PATH = '../results/model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
+    #NGRAM_DICT_FILEPATH = '' # TODO
 
     NUM_OPINION_SHARDS = 10 #1340
-    MIN_REQUIRED_COUNT = 1000 #50
+    MIN_REQUIRED_COUNT = 2
     USE_TFIDF = True
-    CODED_FEATURE_NAMES = 'geniss'
-
+    CODED_FEATURE_NAMES = None # TODO 'geniss'
 
     # Model params
     TRAIN_PCT = 0.75
@@ -271,34 +282,33 @@ def main():
 
     print 'Experiment:', DESCRIPTION
 
-    X, case_ids, y,PARAMETERS_DICT = jd.load_data(INPUT_DATA_DIR, OUTPUT_DATA_DIR,
-                                  NUM_OPINION_SHARDS, MIN_REQUIRED_COUNT,
-                                  USE_TFIDF, CODED_FEATURE_NAMES)
+    X, case_ids, y, PARAMETERS_DICT, ngram_ids = jd.load_data(INPUT_DATA_DIR, OUTPUT_DATA_DIR,
+                                                              NUM_OPINION_SHARDS, MIN_REQUIRED_COUNT,
+                                                              USE_TFIDF, CODED_FEATURE_NAMES)
+    ngrams = ngram_dictionary.ngram_ids_to_strings(NGRAM_DICT_FILEPATH, ngram_ids)
 
     # TODO write a loop for all of the params
     print 'Training and scoring models...'
     train_and_score_model(X, y, case_ids, 'baseline', train_pct=TRAIN_PCT, 
                           reg_min_log10=None, reg_max_log10=None, scoring=None, feature_reduction_type=FEATURE_REDUCTION_TYPE,
                           result_path=RESULT_PATH, description=DESCRIPTION,
-                          parameters_dict = PARAMETERS_DICT)
+                          parameters_dict = PARAMETERS_DICT, ngrams=ngrams)
     train_and_score_model(X, y, case_ids, 'logistic', train_pct=TRAIN_PCT,
                           reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, feature_reduction_type=FEATURE_REDUCTION_TYPE,
                           result_path=RESULT_PATH, description=DESCRIPTION,
-                          parameters_dict = PARAMETERS_DICT)
+                          parameters_dict = PARAMETERS_DICT, ngrams=ngrams)
     train_and_score_model(X, y, case_ids, 'naive_bayes', train_pct=TRAIN_PCT,
                           reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, feature_reduction_type=FEATURE_REDUCTION_TYPE,
                           result_path=RESULT_PATH, description=DESCRIPTION,
-                          parameters_dict = PARAMETERS_DICT)
+                          parameters_dict = PARAMETERS_DICT, ngrams=ngrams)
     train_and_score_model(X, y, case_ids, 'bernoulli_bayes', train_pct=TRAIN_PCT,
                           reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, feature_reduction_type=FEATURE_REDUCTION_TYPE,
                           result_path=RESULT_PATH, description=DESCRIPTION,
-                          parameters_dict = PARAMETERS_DICT)
+                          parameters_dict = PARAMETERS_DICT, ngrams=ngrams)
     train_and_score_model(X, y, case_ids, 'svm', train_pct=TRAIN_PCT,
                           reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, scoring=SCORING, feature_reduction_type=FEATURE_REDUCTION_TYPE,
                           result_path=RESULT_PATH, description=DESCRIPTION,
-                          parameters_dict = PARAMETERS_DICT)
-
-    # TODO P0 Make regularization type something that varies in the pipline
+                          parameters_dict = PARAMETERS_DICT, ngrams=ngrams)
 
     # TODO P0 Charlie Connect charts to real data
 
