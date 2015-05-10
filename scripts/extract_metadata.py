@@ -1,13 +1,14 @@
 import pandas as pd
 from course_utils import trainTest
 
-def extract_metadata(inpath):
+def extract_metadata(inpath,drop_mixed):
     '''
     extracts list of judges, their vote valences, and whether they voted with the majority;
     as well as information about their decisions from case
 
     args: 
         path of input file (ex: 'data/merged_caselevel_data.csv')
+        drop_mixed: Boolean, whether to drop 2's and 0's
 
     returns:
         dataframe with only the relevant columns
@@ -19,23 +20,16 @@ def extract_metadata(inpath):
     assert df.shape[1]>160, "df is wrong shape"
     judges = df.iloc[:,160:229]
 
-    #extract caseID and create classification labels
-    y = df.loc[:,('caseid','direct1')]
-    y['liberal'] = 0
-    y.loc[y['direct1']==3,'liberal']=1
-    y['conservative'] = 0
-    y.loc[y['direct1']==1,'conservative']=1
-    y['mixed'] = 0
-    y.loc[y['direct1']==2,'mixed']=1
-    y['unknown'] = 0
-    y.loc[y['direct1']==0,'unknown']=1
-    y.head()
-
-    #extract other info about the decisions, starting with case ID and majority vote (direct1) 
-    decisions = df.loc[:,('geniss','casetyp1','treat','majvotes','dissent','concur','casetyp2','direct2', 'year', 'month', 'day')]
+    #extract info about the decisions, starting with case ID and majority vote (direct1) 
+    decisions = df.loc[:,('caseid','direct1','geniss','casetyp1','treat','majvotes','dissent','concur','casetyp2','direct2', 'year', 'month', 'day')]
 
     #merge labels, judges and decisions
-    df2 = pd.concat([y,decisions,judges],axis=1)
+    df2 = pd.concat([decisions,judges],axis=1)
+    df2.drop_duplicates(subset='caseid',inplace=True)
+
+    if drop_mixed:
+        df2 = df2.loc[df2['direct1'].isin([1,3]),:]
+
     return df2
 
 #TODO: Split on a pivot date, rather than random: train is before X date, test is after
