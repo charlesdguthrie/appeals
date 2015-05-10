@@ -316,7 +316,7 @@ def main():
     INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
     OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
     RESULT_PATH = '../results/model_results.pkl'
-    NGRAM_DICT_FILEPATH = '../data/vocab_map.p' # TODO
+    NGRAM_DICT_FILEPATH = '../test_data/vocab_map.p' # TODO
 
     #Load_data params
     NUM_OPINION_SHARDS = 10 #1340

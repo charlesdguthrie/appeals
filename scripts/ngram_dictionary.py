@@ -15,7 +15,7 @@ def ngram_ids_to_strings(ngram_pickle_filepath, ngram_ids):
 # They're probably in sorted order, though.
 def print_important_ngrams(ngrams, coefficients, num_labels):
     # If there are only two labels, there is only one vector of coefs
-    if num_labels == 2:
+    if num_labels > 1:
         num_labels = 1
     for i in range(num_labels):
         top10 = np.argsort(coefficients[i])[-10:] # TODO sort by absolute value?
