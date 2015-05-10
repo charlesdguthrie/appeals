@@ -10,8 +10,8 @@ import seaborn as sns
 
 CONTEXT='notebook'
 
-def get_results_df(results_path):
-    log = pickle.load(open( results_path, "rb" ))
+def get_results_df(result_path):
+    log = pickle.load(open( result_path, "rb" ))
     raw_df = pd.DataFrame.from_dict(log)
     available_columns = list(raw_df.columns)
     desired_columns = ['strat_column','strat_value','model','best_score','train_accuracy','test_accuracy','num_cases','num_features','num_opinion_shards']
@@ -53,11 +53,11 @@ def best_model_accuracy_bars(df,metric,context):
     '''
     
     font_size = {
-	    'paper':8,
-	    'poster':16,
-	    'notebook':10,
-	    'talk':13
-	}
+        'paper':8,
+        'poster':16,
+        'notebook':10,
+        'talk':13
+    }
     sns.set_context(context)
     model_list,score_list = identify_best_of_each_model(df,metric)
     
@@ -80,19 +80,19 @@ def best_model_accuracy_bars(df,metric,context):
     plt.show()
 
 def main():
-	STRATIFIED_RESULTS_PATH = "../results/model_results.pkl.20150510-022044.20150510-022044.min_required_count.50.all_features.accuracy"
-	UNSTRAT_RESULTS_PATH = "../results/model_results.pkl.20150509-052203.20150509-052203.min_required_count.100.chi2.accuracy.geniss"
-	RESULTS_CSV_PATH="../results/stratified_results.csv"
-	CONTEXT='notebook'
+    STRATIFIED_RESULT_PATH = "../results/model_results.pkl.20150510-022044.20150510-022044.min_required_count.50.all_features.accuracy"
+    UNSTRAT_RESULT_PATH = "../results/model_results.pkl.20150509-052203.20150509-052203.min_required_count.100.chi2.accuracy.geniss"
+    RESULTS_CSV_PATH="../results/stratified_results.csv"
+    CONTEXT='notebook'
 
-	sdf=get_results_df(STRATIFIED_RESULTS_PATH)
-	print "Stratified model results saved to %s" %RESULTS_CSV_PATH
-	sdf.to_csv(RESULTS_CSV_PATH)
-	print_weighted_accuracy(sdf)
+    sdf=get_results_df(STRATIFIED_RESULT_PATH)
+    print "Stratified model results saved to %s" %RESULTS_CSV_PATH
+    sdf.to_csv(RESULTS_CSV_PATH)
+    print_weighted_accuracy(sdf)
 
-	df = get_results_df(UNSTRAT_RESULTS_PATH)
-	best_model_accuracy_bars(df,'best_score',CONTEXT)
-	best_model_accuracy_bars(df,'test_accuracy',CONTEXT)
+    df = get_results_df(UNSTRAT_RESULT_PATH)
+    best_model_accuracy_bars(df,'best_score',CONTEXT)
+    best_model_accuracy_bars(df,'test_accuracy',CONTEXT)
 
 if __name__ == '__main__':
     main()

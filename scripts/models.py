@@ -3,10 +3,14 @@ import numpy as np
 import cPickle as pickle
 import time
 import sys
-import extract_metadata
-import join_data as jd
 from datetime import datetime
 
+#our own files
+import extract_metadata
+import join_data as jd
+import results
+
+#sklearn stuff
 from sklearn.feature_selection import chi2, SelectFpr
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
@@ -302,7 +306,7 @@ def main():
     # Charlie Params
     INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
     OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
-    RESULT_PATH = '../results/model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
+    RESULT_PATH = '../results/model_results.pkl'
 
     #Load_data params
     NUM_OPINION_SHARDS = 10 #1340
@@ -320,8 +324,12 @@ def main():
     # NOTE: this will be too slow to run locally if feature reduction is enabled
     FEATURE_REDUCTION_TYPE = None # TODO try 'chi2' or l1svc
 
-    DESCRIPTION = '.'.join([datetime.now().strftime('%Y%m%d-%H%M%S'), 'min_required_count', str(MIN_REQUIRED_COUNT), 
-                            FEATURE_REDUCTION_TYPE if FEATURE_REDUCTION_TYPE else 'all_features', SCORING]) 
+    DESCRIPTION = '.'.join([
+        datetime.now().strftime('%Y%m%d-%H%M%S'), 'min_required_count', str(MIN_REQUIRED_COUNT), 
+        FEATURE_REDUCTION_TYPE if FEATURE_REDUCTION_TYPE else 'all_features', 
+        SCORING,
+        'stratify_by_'+STRAT_COLUMN if STRAT_COLUMN else ''
+        ]) 
     RESULT_PATH = RESULT_PATH + '.' + DESCRIPTION
 
     print 'Experiment:', DESCRIPTION
@@ -341,6 +349,13 @@ def main():
                     feature_reduction_type=FEATURE_REDUCTION_TYPE,
                     result_path=RESULT_PATH, description=DESCRIPTION,
                     parameters_dict = PARAMETERS_DICT)
+
+        RESULTS_CSV_PATH=RESULT_PATH+".csv"
+        df = results.get_results_df(RESULT_PATH)
+        df.to_csv(RESULTS_CSV_PATH)
+        print "Stratified model results saved to %s" %RESULTS_CSV_PATH
+        results.best_model_accuracy_bars(df,'best_score',CONTEXT)
+        results.best_model_accuracy_bars(df,'test_accuracy',CONTEXT)
     else:
         stratify_and_run_models(STRAT_COLUMN,X,y,filtered_cases_df,train_pct=TRAIN_PCT,
                     reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, 
@@ -348,6 +363,14 @@ def main():
                     feature_reduction_type=FEATURE_REDUCTION_TYPE,
                     result_path=RESULT_PATH, description=DESCRIPTION,
                     parameters_dict = PARAMETERS_DICT)
+
+        RESULTS_CSV_PATH=RESULT_PATH+".csv"
+        CONTEXT='notebook'
+
+        sdf=results.get_results_df(RESULT_PATH)
+        print "Stratified model results saved to %s" %RESULTS_CSV_PATH
+        sdf.to_csv(RESULTS_CSV_PATH)
+        results.print_weighted_accuracy(sdf)
 
 
 
