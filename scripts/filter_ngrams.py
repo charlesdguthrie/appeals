@@ -5,7 +5,7 @@
 VOCAB_DATA_DIR = '/scratch/akp258/ml_input_data/vocab_map_text'
 NGRAM_ID_COUNTS_FILE = '/scratch/akp258/ml_input_data/total_ngram_counts.p.15466'
 #TODO TESTING NGRAM_ID_COUNTS_FILE = '/scratch/akp258/ml_input_data/total_ngram_counts.p.125'
-NUM_VOCAB_SHARDS = 1390
+NUM_VOCAB_SHARDS = 508
 COUNT_CUTOFF = 50
 OUTPUT_FILE_PREFIX = '/scratch/akp258/ml_output_data/filtered_vocab_map.p'
 
