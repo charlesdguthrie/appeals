@@ -1,14 +1,15 @@
+#our own files
+import extract_metadata
+import join_data as jd
+import ngram_dictionary
+import results
+
 import pandas as pd
 import numpy as np
 import cPickle as pickle
 import time
 import sys
 from datetime import datetime
-
-#our own files
-import extract_metadata
-import join_data as jd
-import results
 
 #sklearn stuff
 from sklearn.feature_selection import chi2, SelectFpr
@@ -145,18 +146,23 @@ def log_to_csv(log_path,csv_path):
 
 def train_and_score_model(X, y, case_ids, model,
                           train_pct, reg_min_log10, reg_max_log10, scoring, feature_reduction_type,
-                          result_path, description,parameters_dict):
+                          result_path, description, parameters_dict, ngrams):
     '''
     Train and score a model
     Args:
-        X,y,case_ids - your data.  X is a matrix, y is an array, case_ids is a list
-        model: string.  So far either 'baseline', 'logistic', or 'svm'
-        train_pct: float between 0 and 1.  Fraction of your subsample to use as training.
-        reg_min_log10, reg_max_log10: integers.  The low and high of your grid search for regularization parameter.
-        scoring: scoring method
-        feature_reduction_type: Either 'chi2', 'l1svc', or None.
-        result_path: The path of the filename to which the results should be written.
-        description: The experiment description, to be saved in the results file.
+      X,y,case_ids - your data.  X is a matrix, y is an array, case_ids is a list
+      model: string.  So far either 'baseline', 'logistic', or 'svm'
+      train_pct: float between 0 and 1.  Fraction of your subsample to use as training.
+      reg_min_log10, reg_max_log10: integers.  The low and high of your grid search for regularization parameter.
+      scoring: scoring method
+      feature_reduction_type: Either 'chi2', 'l1svc', or None.
+      result_path: The path of the filename to which the results should be written.
+      description: The experiment description, to be saved in the results file.
+      parameters_dict: dictionary of parameters, for debugging
+      ngrams: The list of ngram strings corresponding to the columns of 
+        sparse_feature_matrix. If coded_feature_names were included, those
+        features won't be included in this list.
+
     Returns:
         Model score
 
@@ -248,6 +254,7 @@ def train_and_score_model(X, y, case_ids, model,
         print 'best estimator:', fitted_model.best_estimator_
         print 'best params:', fitted_model.best_params_
         print 'best score from that estimator:', fitted_model.best_score_
+        ngram_dictionary.print_important_ngrams(ngrams, fitted_model.best_estimator_.named_steps['classifier'].coef_, 3) # TODO num labels might change...
 
     total_time = time.time() - start_time
     print 'Total time:', total_time
@@ -263,23 +270,23 @@ def train_and_score_model(X, y, case_ids, model,
 def run_models(X,y,case_ids,
         train_pct,reg_min_log10,reg_max_log10,
         scoring,feature_reduction_type,
-        result_path,description,parameters_dict):
+        result_path,description,parameters_dict,ngrams):
 
     print 'Training and scoring models...'
     train_and_score_model(X, y, case_ids, 'baseline', train_pct=train_pct, 
                           reg_min_log10=None, reg_max_log10=None, scoring=None, feature_reduction_type=feature_reduction_type,
                           result_path=result_path, description=description,
-                          parameters_dict = parameters_dict)
+                          parameters_dict = parameters_dict,ngrams=ngrams)
     for model in ['naive_bayes','bernoulli_bayes','logistic','svm']:
         train_and_score_model(X, y, case_ids, model, train_pct=train_pct,
                           reg_min_log10=reg_min_log10, reg_max_log10=reg_max_log10, scoring=scoring, feature_reduction_type=feature_reduction_type,
                           result_path=result_path, description=description,
-                          parameters_dict = parameters_dict)
+                          parameters_dict = parameters_dict,ngrams=ngrams)
 
 def stratify_and_run_models(strat_column,X_full, y_full,filtered_cases_df,
                             train_pct,reg_min_log10,reg_max_log10,
                             scoring,feature_reduction_type,
-                            result_path,description,parameters_dict):
+                            result_path,description,parameters_dict,ngrams):
     strat_column_vals = sorted(filtered_cases_df[strat_column].unique())
     for val in strat_column_vals:
         X,y,case_ids = cut_stratum(X_full, y_full,filtered_cases_df,strat_column,val)
@@ -290,29 +297,32 @@ def stratify_and_run_models(strat_column,X_full, y_full,filtered_cases_df,
         run_models(X, y, case_ids, train_pct=train_pct,
                           reg_min_log10=reg_min_log10, reg_max_log10=reg_max_log10, scoring=scoring, feature_reduction_type=feature_reduction_type,
                           result_path=result_path, description=description,
-                          parameters_dict = parameters_dict)
+                          parameters_dict = parameters_dict,ngrams=ngrams)
 
 def main():
     # HPC Params
     #INPUT_DATA_DIR = '/scratch/akp258/ml_input_data'
     #OUTPUT_DATA_DIR = '/scratch/akp258/ml_output_data'
     #RESULT_PATH = '/scratch/akp258/ml_results/model_results.pkl'
+    #NGRAM_DICT_FILEPATH = '' # TODO
 
     # Alex Data params
-    #INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
-    #OUTPUT_DATA_DIR = '/tmp'
-    #RESULT_PATH = '/tmp/model_results.pkl'
+    # INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
+    # OUTPUT_DATA_DIR = '/tmp'
+    # RESULT_PATH = '/tmp/model_results.pkl'
+    # NGRAM_DICT_FILEPATH = '/tmp/vocab_map.p' # TODO
 
     # Charlie Params
     INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
     OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
     RESULT_PATH = '../results/model_results.pkl'
+    NGRAM_DICT_FILEPATH = '../data/vocab_map.p' # TODO
 
     #Load_data params
     NUM_OPINION_SHARDS = 10 #1340
-    MIN_REQUIRED_COUNT = 50 #50
+    MIN_REQUIRED_COUNT = 2
     USE_TFIDF = True
-    CODED_FEATURE_NAMES = None
+    CODED_FEATURE_NAMES = None # TODO 'geniss'
     DROP_MIXED = True
 
     # Model params
@@ -335,11 +345,13 @@ def main():
     print 'Experiment:', DESCRIPTION
 
     #Load Data
-    X, case_ids, y,filtered_cases_df,PARAMETERS_DICT = jd.load_data(
+    X, case_ids, y,filtered_cases_df,PARAMETERS_DICT,ngram_ids = jd.load_data(
                                   INPUT_DATA_DIR, OUTPUT_DATA_DIR,
                                   NUM_OPINION_SHARDS, MIN_REQUIRED_COUNT,
                                   USE_TFIDF, CODED_FEATURE_NAMES,DROP_MIXED
                                 )
+
+    ngrams = ngram_dictionary.ngram_ids_to_strings(NGRAM_DICT_FILEPATH, ngram_ids)
 
     #Run models, either with stratified data or not
     if STRAT_COLUMN is None:
@@ -348,7 +360,7 @@ def main():
                     scoring=SCORING,
                     feature_reduction_type=FEATURE_REDUCTION_TYPE,
                     result_path=RESULT_PATH, description=DESCRIPTION,
-                    parameters_dict = PARAMETERS_DICT)
+                    parameters_dict = PARAMETERS_DICT,ngrams=ngrams)
 
         RESULTS_CSV_PATH=RESULT_PATH+".csv"
         df = results.get_results_df(RESULT_PATH)
@@ -362,7 +374,7 @@ def main():
                     scoring=SCORING,
                     feature_reduction_type=FEATURE_REDUCTION_TYPE,
                     result_path=RESULT_PATH, description=DESCRIPTION,
-                    parameters_dict = PARAMETERS_DICT)
+                    parameters_dict = PARAMETERS_DICT,ngrams=ngrams)
 
         RESULTS_CSV_PATH=RESULT_PATH+".csv"
         CONTEXT='notebook'
