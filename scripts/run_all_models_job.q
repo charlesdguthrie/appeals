@@ -6,8 +6,8 @@
 #PBS -l nodes=1:ppn=8
 ## Quit if this takes longer than eight hours.
 #PBS -l walltime=8:00:00
-## Give it 16 GB of memory
-#PBS -l mem=16GB
+## Give it 64 GB of memory
+#PBS -l mem=64GB
 ## Job name
 #PBS -N run_all_appeals_models
 ## Pipeline output and errors to the same file
