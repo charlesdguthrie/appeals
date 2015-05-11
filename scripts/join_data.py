@@ -534,10 +534,13 @@ def load_data(input_data_dir, output_data_dir,
                                             feature_matrix_filename)
         with open(case_ids_filename, 'wb') as f:
             pickle.dump(case_ids, f)
+        with open(cases_df_filename, 'wb') as f:
+            pickle.dump(filtered_cases_df, f)
         with open(ngram_ids_filename, 'wb') as f:
             pickle.dump(ngram_ids, f)
         print 'Feature matrix saved as %s' % feature_matrix_filename
         print 'Case IDs saved as %s' % case_ids_filename
+        print 'Cases DF saved as %s' % cases_df_filename
         print 'NGram IDs saved as %s' % ngram_ids_filename
 
     print 'Total time spent building data:', time.time() - start_time
