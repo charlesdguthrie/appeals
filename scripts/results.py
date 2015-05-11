@@ -22,10 +22,9 @@ def get_results_df(result_path):
 def print_weighted_accuracy(df):
     models = df['model'].unique()
     for model in models:
-        mdf = df[df['model']==model]
+        mdf = df.loc[df['model']==model,:]
         total_cases = sum(mdf['num_cases'])
-        mdf['weight_calc'] = mdf['test_accuracy']*mdf['num_cases']/total_cases
-        weighted_accuracy = sum(mdf['weight_calc'])
+        weighted_accuracy = sum(mdf['test_accuracy']*mdf['num_cases']/total_cases)
         print "model: %s, weighted accuracy: %s%%" %(model,round(weighted_accuracy*100,1))
 
 def identify_best_of_each_model(df,metric):
