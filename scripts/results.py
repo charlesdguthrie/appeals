@@ -45,7 +45,7 @@ def identify_best_of_each_model(df,metric):
         
     return models,score_list
 
-def best_model_accuracy_bars(df,metric,context):
+def best_model_accuracy_bars(df,fig_path,metric,context):
     '''
     df: data frame
     context: paper,talk, notebook, poster
@@ -66,6 +66,7 @@ def best_model_accuracy_bars(df,metric,context):
     bar_labels = model_list
     
     #plot
+    fig = plt.figure()
     plt.barh(bar_pos,bar_size, align='center', alpha=0.4)
     plt.yticks(bar_pos, bar_labels)
     plt.xticks([],[]) #no x-axis
@@ -76,7 +77,7 @@ def best_model_accuracy_bars(df,metric,context):
         
     pretty_metric = {'test_accuracy':'Test','best_score':'CV'}
     plt.title('Optimized %s Accuracy of Each Model' % pretty_metric[metric])
-    plt.show()
+    fig.savefig(fig_path, bbox_inches='tight')
 
 def main():
     STRATIFIED_RESULT_PATH = "../results/model_results.pkl.20150510-022044.20150510-022044.min_required_count.50.all_features.accuracy"
@@ -90,8 +91,10 @@ def main():
     print_weighted_accuracy(sdf)
 
     df = get_results_df(UNSTRAT_RESULT_PATH)
-    best_model_accuracy_bars(df,'best_score',CONTEXT)
-    best_model_accuracy_bars(df,'test_accuracy',CONTEXT)
+    fig_path="../results/stratified_best_score.png"
+    best_model_accuracy_bars(df,fig_path,'best_score',CONTEXT)
+    fig_path="../results/stratified_test_accuracy.png"
+    best_model_accuracy_bars(df,fig_path,'test_accuracy',CONTEXT)
 
 if __name__ == '__main__':
     main()
