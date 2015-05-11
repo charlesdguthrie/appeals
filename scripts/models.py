@@ -342,18 +342,18 @@ def main():
     #RESULT_PATH = RESULT_DIR + '/model_results.pkl'
 
     # Alex Data params
-    # INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
-    # OUTPUT_DATA_DIR = '/tmp'
-    # RESULT_DIR = '/tmp'
-    # RESULT_PATH = RESULT_DIR + '/model_results.pkl'
-    # NGRAM_DICT_FILEPATH = 'test_data/vocab_map.p'
+    INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
+    OUTPUT_DATA_DIR = '/tmp'
+    RESULT_DIR = '/tmp'
+    RESULT_PATH = RESULT_DIR + '/model_results.pkl'
+    NGRAM_DICT_FILEPATH = 'test_data/vocab_map.p'
 
     # Charlie Params
-    INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
-    OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
-    RESULT_DIR = '../results'
-    RESULT_PATH = RESULT_DIR + '/model_results.pkl'
-    NGRAM_DICT_FILEPATH = '../test_data/vocab_map.p'
+    # INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
+    # OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
+    # RESULT_DIR = '../results'
+    # RESULT_PATH = RESULT_DIR + '/model_results.pkl'
+    # NGRAM_DICT_FILEPATH = '../test_data/vocab_map.p'
 
     #Load_data params
     NUM_OPINION_SHARDS = 100 #1340
