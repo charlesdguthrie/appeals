@@ -41,17 +41,10 @@ def cut_stratum(X_full,y_full,filtered_cases_df,column,value):
     assert X.shape[0]==len(y), "cut_stratum failed: X and y not same shape"
     return X,y,case_ids
 
-def drop_mixed_labels(X_full,y_full,case_ids_full):
-    ix = np.in1d(y_full, [1,3])
-    #idx = list(np.where(ix)[0])
-    case_ids = list(np.array(case_ids_full)[ix])
-    X = X_full[ix,:]
-    y = y_full[ix]
-    assert X.shape[0]==len(y), "drop_mixed_labels failed: X and y not same shape"
-    assert X.shape[0]==len(case_ids), "drop_mixed_labels failed: X and cases_df not same shape"
-    return X,y,case_ids
-
 def train_test_split(X,y, ordered_case_ids,pct_train):
+    '''
+    Split into train and test sets
+    '''
     train_rows = int(pct_train*len(y))
     y_train = np.array(y[:train_rows])
     y_test = np.array(y[train_rows:])
@@ -63,6 +56,27 @@ def train_test_split(X,y, ordered_case_ids,pct_train):
     assert X_test.shape[1]>0, "X_test has no features"
     return X_train,y_train,case_ids_train,X_test,y_test,case_ids_test
 
+def drop_mixed_labels(X_full,y_full,case_ids_full):
+    '''
+    Removes data points with labels 'unknown' (0) or 'mixed'(2)
+    By selecting only points with labels 1 and 3
+    Intended for training data only.
+
+    args:
+      X_full,y_full,case_ids_full: unfiltered versions
+
+    returns:
+      X,y,case_ids: filtered
+
+    '''
+    ix = np.in1d(y_full, [1,3])
+    #idx = list(np.where(ix)[0])
+    case_ids = list(np.array(case_ids_full)[ix])
+    X = X_full[ix,:]
+    y = y_full[ix]
+    assert X.shape[0]==len(y), "drop_mixed_labels failed: X and y not same shape"
+    assert X.shape[0]==len(case_ids), "drop_mixed_labels failed: X and cases_df not same shape"
+    return X,y,case_ids
 
 def print_accuracy_info(y_pred, y_true):
     '''
@@ -324,21 +338,26 @@ def main():
     # HPC Params
     #INPUT_DATA_DIR = '/scratch/akp258/ml_input_data'
     #OUTPUT_DATA_DIR = '/scratch/akp258/ml_output_data'
-    #RESULT_PATH = '/scratch/akp258/ml_results/model_results.pkl'
+    #RESULT_DIR = '/scratch/akp258/ml_results'
+    #RESULT_PATH = RESULT_DIR + '/model_results.pkl'
 
     # Alex Data params
     INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
     OUTPUT_DATA_DIR = '/tmp'
-    RESULT_PATH = '/tmp/model_results.pkl'
-   
+    RESULT_DIR = '/tmp'
+    RESULT_PATH = RESULT_DIR + '/model_results.pkl'
+    NGRAM_DICT_FILEPATH = 'test_data/vocab_map.p'
+
     # Charlie Params
-    #INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
-    #OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
-    #RESULT_PATH = '../results/model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
+    # INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
+    # OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
+    # RESULT_DIR = '../results'
+    # RESULT_PATH = RESULT_DIR + '/model_results.pkl'
+    # NGRAM_DICT_FILEPATH = '../test_data/vocab_map.p'
 
     #Load_data params
-    NUM_OPINION_SHARDS = 10 #1340
-    MIN_REQUIRED_COUNT = 2
+    NUM_OPINION_SHARDS = 100 #1340
+    MIN_REQUIRED_COUNT = 20
     USE_TFIDF = True
     CODED_FEATURE_NAMES = None # TODO 'geniss'
     CONTEXT='notebook'
@@ -384,8 +403,10 @@ def main():
         df = results.get_results_df(RESULT_PATH)
         df.to_csv(RESULTS_CSV_PATH)
         print "Stratified model results saved to %s" %RESULTS_CSV_PATH
-        results.best_model_accuracy_bars(df,'best_score',CONTEXT)
-        results.best_model_accuracy_bars(df,'test_accuracy',CONTEXT)
+        fig_path = RESULT_PATH+"best_score.png"
+        results.best_model_accuracy_bars(df,fig_path,'best_score',CONTEXT)
+        fig_path = RESULT_PATH+"test_accuracy.png"
+        results.best_model_accuracy_bars(df,fig_path,'test_accuracy',CONTEXT)
     else:
         stratify_and_run_models(STRAT_COLUMN,X,y,filtered_cases_df,train_pct=TRAIN_PCT,
                                 reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, 
