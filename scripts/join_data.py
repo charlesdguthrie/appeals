@@ -118,10 +118,13 @@ def filter_infrequent_ngrams(rows_ngram_counts, case_ids, min_required_count,
 
     # <HACK> to save the total counts dict to a file
     if GLOBAL_INPUT_DATA_DIR:
-        print 'Writing n-gram counts to disk...'
         filename = GLOBAL_INPUT_DATA_DIR + '/' + NGRAM_COUNTS_FILE_PREFIX + str(len(case_ids))
-        with open(filename, 'wb') as f:
-            pickle.dump(total_ngram_counts, f)
+        if os.path.isfile(filename):
+            print 'Writing n-gram counts to disk...'
+            with open(filename, 'wb') as f:
+                pickle.dump(total_ngram_counts, f)
+        else:
+            print 'NGram counts file already exists, skipping generation.'
     # </HACK>
 
     print 'Filtering n-grams...'
@@ -543,8 +546,8 @@ def load_data(input_data_dir, output_data_dir,
 
 if __name__ == '__main__':
     # Main Parameters
-    num_opinion_shards = 50 #1340
-    min_required_count = 4 #150
+    num_opinion_shards = 20 #1340
+    min_required_count = 2 #150
     tfidf = True
     coded_feature_names=None
     input_data_dir = '/Users/pinesol/mlcs_data'

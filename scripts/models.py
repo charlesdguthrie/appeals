@@ -333,22 +333,26 @@ def stratify_and_run_models(strat_column,X_full, y_full,filtered_cases_df,
                           parameters_dict = parameters_dict,ngrams=ngrams,drop_mixed=drop_mixed)
 
 def main():
+    NGRAM_DICT_FILEPATH = 'test_data/filtered_vocab_map.p.num_shards.508.cutoff.50'
+
     # HPC Params
     #INPUT_DATA_DIR = '/scratch/akp258/ml_input_data'
     #OUTPUT_DATA_DIR = '/scratch/akp258/ml_output_data'
-    #RESULT_PATH = '/scratch/akp258/ml_results/model_results.pkl'
-    #NGRAM_DICT_FILEPATH = '' # TODO
+    #RESULT_DIR = '/scratch/akp258/ml_results'
+    #RESULT_PATH = RESULT_DIR + '/model_results.pkl'
 
     # Alex Data params
     # INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
     # OUTPUT_DATA_DIR = '/tmp'
-    # RESULT_PATH = '/tmp/model_results.pkl'
+    # RESULT_DIR = '/tmp'
+    # RESULT_PATH = RESULT_DIR + '/model_results.pkl'
     # NGRAM_DICT_FILEPATH = 'test_data/vocab_map.p'
 
     # Charlie Params
     INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
     OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
-    RESULT_PATH = '../results/model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
+    RESULT_DIR = '../results'
+    RESULT_PATH = RESULT_DIR + '/model_results.pkl'
     NGRAM_DICT_FILEPATH = '../test_data/vocab_map.p'
 
     #Load_data params
@@ -356,10 +360,11 @@ def main():
     MIN_REQUIRED_COUNT = 20
     USE_TFIDF = True
     CODED_FEATURE_NAMES = None # TODO 'geniss'
+    CONTEXT='notebook'
 
     # Model params
-    DROP_MIXED = False
-    STRAT_COLUMN='geniss'
+    DROP_MIXED = True
+    STRAT_COLUMN='geniss' # NOTE: make None to disable stratification
     TRAIN_PCT = 0.75
     REG_MIN_LOG10 = -2
     REG_MAX_LOG10 = 2
@@ -398,8 +403,10 @@ def main():
         df = results.get_results_df(RESULT_PATH)
         df.to_csv(RESULTS_CSV_PATH)
         print "Stratified model results saved to %s" %RESULTS_CSV_PATH
-        results.best_model_accuracy_bars(df,'best_score',CONTEXT)
-        results.best_model_accuracy_bars(df,'test_accuracy',CONTEXT)
+        fig_path = RESULT_PATH+"best_score.png"
+        results.best_model_accuracy_bars(df,fig_path,'best_score',CONTEXT)
+        fig_path = RESULT_PATH+"test_accuracy.png"
+        results.best_model_accuracy_bars(df,fig_path,'test_accuracy',CONTEXT)
     else:
         stratify_and_run_models(STRAT_COLUMN,X,y,filtered_cases_df,train_pct=TRAIN_PCT,
                                 reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, 
@@ -409,7 +416,6 @@ def main():
                                 parameters_dict = PARAMETERS_DICT,ngrams=ngrams,drop_mixed=DROP_MIXED)
 
         RESULTS_CSV_PATH=RESULT_PATH+".csv"
-        CONTEXT='notebook'
 
         sdf=results.get_results_df(RESULT_PATH)
         print "Stratified model results saved to %s" %RESULTS_CSV_PATH
