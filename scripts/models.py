@@ -263,12 +263,17 @@ def train_and_score_model(X, y, case_ids, model,
         best_estimator = fitted_model.best_estimator_
         best_params = fitted_model.best_params_
         best_score = fitted_model.best_score_
-
         print 'Fitting Complete!\n'
         print 'best estimator:', fitted_model.best_estimator_
         print 'best params:', fitted_model.best_params_
         print 'best score from that estimator:', fitted_model.best_score_
-        ngram_dictionary.print_important_ngrams(ngrams, fitted_model.best_estimator_.named_steps['classifier'].coef_, 3) # TODO num labels might change...
+
+        # Print the most important n-grams
+        important_ngrams_per_label = ngram_dictionary.get_important_ngrams(
+            ngrams, fitted_model.best_estimator_.named_steps['classifier'].coef_)
+        for i, important_ngrams in enumerate(important_ngrams_per_label):
+            important_ngrams_str = "\n  ".join(important_ngrams)
+            print("Label %s:\n  %s" % (i, important_ngrams_str))
 
     total_time = time.time() - start_time
     print 'Total time:', total_time
@@ -321,16 +326,16 @@ def main():
     #NGRAM_DICT_FILEPATH = '' # TODO
 
     # Alex Data params
-    # INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
-    # OUTPUT_DATA_DIR = '/tmp'
-    # RESULT_PATH = '/tmp/model_results.pkl'
-    # NGRAM_DICT_FILEPATH = '/tmp/vocab_map.p' # TODO
+    INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
+    OUTPUT_DATA_DIR = '/tmp'
+    RESULT_PATH = '/tmp/model_results.pkl'
+    NGRAM_DICT_FILEPATH = 'test_data/vocab_map.p'
 
     # Charlie Params
-    INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
-    OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
-    RESULT_PATH = '../results/model_results.pkl'
-    NGRAM_DICT_FILEPATH = '../test_data/vocab_map.p' # TODO
+    #INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
+    #OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
+    #RESULT_PATH = '../results/model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
+    #NGRAM_DICT_FILEPATH = 'test_data/vocab_map.p'
 
     #Load_data params
     NUM_OPINION_SHARDS = 10 #1340
