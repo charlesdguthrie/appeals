@@ -403,10 +403,11 @@ def main():
         df = results.get_results_df(RESULT_PATH)
         df.to_csv(RESULTS_CSV_PATH)
         print "Stratified model results saved to %s" %RESULTS_CSV_PATH
-        fig_path = RESULT_PATH+"best_score.png"
-        results.best_model_accuracy_bars(df,fig_path,'best_score',CONTEXT)
-        fig_path = RESULT_PATH+"test_accuracy.png"
-        results.best_model_accuracy_bars(df,fig_path,'test_accuracy',CONTEXT)
+# TODO commenting this out until the non stratified version works
+#        fig_path = RESULT_PATH+"best_score.png"
+#        results.best_model_accuracy_bars(df,fig_path,'best_score',CONTEXT)
+#        fig_path = RESULT_PATH+"test_accuracy.png"
+#        results.best_model_accuracy_bars(df,fig_path,'test_accuracy',CONTEXT)
     else:
         stratify_and_run_models(STRAT_COLUMN,X,y,filtered_cases_df,train_pct=TRAIN_PCT,
                                 reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, 
@@ -420,7 +421,8 @@ def main():
         sdf=results.get_results_df(RESULT_PATH)
         print "Stratified model results saved to %s" %RESULTS_CSV_PATH
         sdf.to_csv(RESULTS_CSV_PATH)
-        results.print_weighted_accuracy(sdf)
+# TODO this crashes
+#        results.print_weighted_accuracy(sdf)
 
 
 
