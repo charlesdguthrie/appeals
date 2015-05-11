@@ -319,33 +319,33 @@ def stratify_and_run_models(strat_column,X_full, y_full,filtered_cases_df,
                           parameters_dict = parameters_dict,ngrams=ngrams,drop_mixed=drop_mixed)
 
 def main():
+    NGRAM_DICT_FILEPATH = 'test_data/filtered_vocab_map.p.num_shards.508.cutoff.50'
+
     # HPC Params
     #INPUT_DATA_DIR = '/scratch/akp258/ml_input_data'
     #OUTPUT_DATA_DIR = '/scratch/akp258/ml_output_data'
     #RESULT_PATH = '/scratch/akp258/ml_results/model_results.pkl'
-    #NGRAM_DICT_FILEPATH = '' # TODO
 
     # Alex Data params
     INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
     OUTPUT_DATA_DIR = '/tmp'
     RESULT_PATH = '/tmp/model_results.pkl'
-    NGRAM_DICT_FILEPATH = 'test_data/vocab_map.p'
-
+   
     # Charlie Params
     #INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
     #OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
     #RESULT_PATH = '../results/model_results.pkl.' + datetime.now().strftime('%Y%m%d-%H%M%S')
-    #NGRAM_DICT_FILEPATH = 'test_data/vocab_map.p'
 
     #Load_data params
     NUM_OPINION_SHARDS = 10 #1340
     MIN_REQUIRED_COUNT = 2
     USE_TFIDF = True
     CODED_FEATURE_NAMES = None # TODO 'geniss'
+    CONTEXT='notebook'
 
     # Model params
     DROP_MIXED = True
-    STRAT_COLUMN='geniss'
+    STRAT_COLUMN='geniss' # NOTE: make None to disable stratification
     TRAIN_PCT = 0.75
     REG_MIN_LOG10 = -2
     REG_MAX_LOG10 = 2
@@ -395,7 +395,6 @@ def main():
                                 parameters_dict = PARAMETERS_DICT,ngrams=ngrams,drop_mixed=DROP_MIXED)
 
         RESULTS_CSV_PATH=RESULT_PATH+".csv"
-        CONTEXT='notebook'
 
         sdf=results.get_results_df(RESULT_PATH)
         print "Stratified model results saved to %s" %RESULTS_CSV_PATH
