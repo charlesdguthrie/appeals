@@ -1,3 +1,5 @@
+"""Main file for testing political valence classification."""
+
 #our own files
 import extract_metadata
 import join_data as jd
@@ -240,27 +242,22 @@ def train_and_score_model(X, y, case_ids, model,
             pipeline_steps.append(('feature_reduction', SelectFpr(chi2)))
             param_grid['feature_reduction__alpha'] = [0.4, 0.6, 0.8, 1.0]
         elif feature_reduction_type == 'l1svc':
-            # TODO we can modify the stopping point with 'tol'
-            pipeline_steps.append(('feature_reduction', LinearSVC(penalty="l1", dual=False)))
+            pipeline_steps.append(('feature_reduction', LinearSVC(penalty="l1", dual=True)))
             param_grid['feature_reduction__C'] = [10**i for i in range(reg_min_log10, reg_max_log10 + 1)]
         # Model training step
         if model == 'svm':
             # random_state=0 so it always has the same seed so we get deterministic results.
-            # Using dual=False b.c. there are lots of features.
-            classifier = LinearSVC(penalty='l2', random_state=0, dual=False)
-#            param_grid['classifier__penalty'] = ['l1', 'l2'] # TODO this makes it redoc slow
+            # Using dual=True b.c. there are lots of features.
+            classifier = LinearSVC(penalty='l2', random_state=0, dual=True)
             param_grid['classifier__C'] = [10**i for i in range(reg_min_log10, reg_max_log10 + 1)]
         elif model == 'logistic':
-            classifier = LogisticRegression(penalty='l2')
-#            param_grid['classifier__penalty'] = ['l1', 'l2'] # TODO this makes it redonc slow
+            # Using dual=True b.c. there are lots of features.
+            classifier = LogisticRegression(penalty='l2', dual=True)
             param_grid['classifier__C'] = [10**i for i in range(reg_min_log10, reg_max_log10 + 1)]
         elif model == 'naive_bayes':
-            # TODO why fit_prior? why not?
-            classifier = MultinomialNB(fit_prior=True)
+            classifier = MultinomialNB()
         elif model == 'bernoulli_bayes':
-            # TODO trying aribtrary thresholds for binarize b.c. i'm assuming we've TF-IDF'd the data already.
-            param_grid['classifier__binarize'] = [0.01, 0.1]
-            classifier = BernoulliNB()
+            classifier = BernoulliNB(binarize=0.01)
         else:
             print "ERROR: model unknown"
             return
@@ -340,49 +337,56 @@ def main():
     #OUTPUT_DATA_DIR = '/scratch/akp258/ml_output_data'
     #RESULT_DIR = '/scratch/akp258/ml_results'
     #RESULT_PATH = RESULT_DIR + '/model_results.pkl'
+    #NUM_OPINION_SHARDS = 1340
+    #MIN_REQUIRED_COUNT = 100
 
     # Alex Data params
-    INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
-    OUTPUT_DATA_DIR = '/tmp'
-    RESULT_DIR = '/tmp'
-    RESULT_PATH = RESULT_DIR + '/model_results.pkl'
-    NGRAM_DICT_FILEPATH = 'test_data/vocab_map.p'
+    #INPUT_DATA_DIR = '/Users/pinesol/mlcs_data'
+    #OUTPUT_DATA_DIR = '/tmp'
+    #RESULT_DIR = '/tmp'
+    #RESULT_PATH = RESULT_DIR + '/model_results.pkl'
+    #NUM_OPINION_SHARDS = 100
+    #MIN_REQUIRED_COUNT = 10
 
     # Charlie Params
-    # INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
-    # OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
-    # RESULT_DIR = '../results'
-    # RESULT_PATH = RESULT_DIR + '/model_results.pkl'
-    # NGRAM_DICT_FILEPATH = '../test_data/vocab_map.p'
+    #INPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
+    #OUTPUT_DATA_DIR = '/Users/205341/Documents/git/machine-learning/appeals/data'
+    #RESULT_DIR = '../results'
+    #RESULT_PATH = RESULT_DIR + '/model_results.pkl'
+    #NUM_OPINION_SHARDS = 100
+    #MIN_REQUIRED_COUNT = 10
 
-    #Load_data params
-    NUM_OPINION_SHARDS = 100 #1340
-    MIN_REQUIRED_COUNT = 20
-    USE_TFIDF = True
-    CODED_FEATURE_NAMES = None # TODO 'geniss'
-    CONTEXT='notebook'
-
+    # Load_data params
     # Model params
-    DROP_MIXED = True
-    STRAT_COLUMN='geniss' # NOTE: make None to disable stratification
+    # NOTE: this will be too slow to run locally if feature reduction is enabled
+    FEATURE_REDUCTION_TYPE = None # TODO try 'chi2' or l1svc
+    CODED_FEATURE_NAMES = None # TODO 'geniss'
+    STRAT_COLUMN = None # TODO 'geniss' # NOTE: make None to disable stratification
+    DROP_MIXED = False
+
+    assert not (CODED_FEATURE_NAMES and STRAT_COLUMN)
+
+    # Other params that we never really change.
+    USE_TFIDF = True
     TRAIN_PCT = 0.75
     REG_MIN_LOG10 = -2
     REG_MAX_LOG10 = 2
     SCORING = 'accuracy'
-    # NOTE: this will be too slow to run locally if feature reduction is enabled
-    FEATURE_REDUCTION_TYPE = None # TODO try 'chi2' or l1svc
 
     DESCRIPTION = '.'.join([
         datetime.now().strftime('%Y%m%d-%H%M%S'), 'min_required_count', str(MIN_REQUIRED_COUNT), 
         FEATURE_REDUCTION_TYPE if FEATURE_REDUCTION_TYPE else 'all_features', 
-        SCORING,
-        'stratify_by_'+STRAT_COLUMN if STRAT_COLUMN else ''
-        ]) 
+        SCORING]) 
+    if STRAT_COLUMN:
+        DESCRIPTION += '.stratify_by_'+STRAT_COLUMN
+    elif CODED_FEATURE_NAMES:
+        DESCRIPTION += '.coded_features_'+ CODED_FEATURE_NAMES
+
     RESULT_PATH = RESULT_PATH + '.' + DESCRIPTION
 
     print 'Experiment:', DESCRIPTION
 
-    #Load Data
+    # Load Data
     X, case_ids, y,filtered_cases_df,PARAMETERS_DICT,ngram_ids = jd.load_data(
                                   INPUT_DATA_DIR, OUTPUT_DATA_DIR,
                                   NUM_OPINION_SHARDS, MIN_REQUIRED_COUNT,
@@ -390,8 +394,8 @@ def main():
 
     ngrams = ngram_dictionary.ngram_ids_to_strings(NGRAM_DICT_FILEPATH, ngram_ids)
 
-    #Run models, either with stratified data or not
-    if STRAT_COLUMN is None:
+    # Run models, either with stratified data or not
+    if not STRAT_COLUMN:
         run_models(X,y,case_ids,train_pct=TRAIN_PCT,
                     reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, 
                     scoring=SCORING,
@@ -402,12 +406,7 @@ def main():
         RESULTS_CSV_PATH=RESULT_PATH+".csv"
         df = results.get_results_df(RESULT_PATH)
         df.to_csv(RESULTS_CSV_PATH)
-        print "Stratified model results saved to %s" %RESULTS_CSV_PATH
-# TODO commenting this out until the non stratified version works
-#        fig_path = RESULT_PATH+"best_score.png"
-#        results.best_model_accuracy_bars(df,fig_path,'best_score',CONTEXT)
-#        fig_path = RESULT_PATH+"test_accuracy.png"
-#        results.best_model_accuracy_bars(df,fig_path,'test_accuracy',CONTEXT)
+        print "Results saved to %s" %RESULTS_CSV_PATH
     else:
         stratify_and_run_models(STRAT_COLUMN,X,y,filtered_cases_df,train_pct=TRAIN_PCT,
                                 reg_min_log10=REG_MIN_LOG10, reg_max_log10=REG_MAX_LOG10, 
@@ -421,41 +420,6 @@ def main():
         sdf=results.get_results_df(RESULT_PATH)
         print "Stratified model results saved to %s" %RESULTS_CSV_PATH
         sdf.to_csv(RESULTS_CSV_PATH)
-# TODO this crashes
-#        results.print_weighted_accuracy(sdf)
-
-
-
-    # TODO P0 Make regularization type something that varies in the pipline
-
-    # TODO P0 Charlie Connect charts to real data
-
-    # TODO P1.0 Print top 50 most-used N-Grams for each classifier
-
-    # TODO P1.1 Calculate scores other than f1_weighted
-
-    # TODO P1 Write a second base classifier
-    # There should be a one that guesses randomly, but in proportion to the different classes
-    # This will probably do better than the other base classifier. We have to beat this!
-
-    # TODO P1 why are we using f1_weighted? We need to cite a justification
-    # We should be able to justify f1 weighted using this doc:
-    # http://scikit-learn.org/stable/modules/model_evaluation.html#from-binary-to-multiclass-and-multilabel
-
-    # TODO P1 Try LogisticRegressionCV, which uses a 'regularization path', so it's faster than grid search
-    # http://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegressionCV.html#sklearn.linear_model.LogisticRegressionCV
-
-
-    # TODO P2 Visualize the confustion matrix
-    # http://scikit-learn.org/stable/auto_examples/model_selection/plot_confusion_matrix.html#example-model-selection-plot-confusion-matrix-py
-
-    # TODO P2 Look into using pipeline system for setting up experiments
-    # THis will allows us to try differentsssata sizes, data prep, and hyper params. 
-    # Example: http://scikit-learn.org/stable/auto_examples/model_selection/grid_search_text_feature_extraction.html#example-model-selection-grid-search-text-feature-extraction-py
-
-    # TODO P2 try other model-specific cross validation techniques
-    # http://scikit-learn.org/stable/modules/grid_search.html#model-specific-cross-validation
-
 
 
 if __name__ == '__main__':
