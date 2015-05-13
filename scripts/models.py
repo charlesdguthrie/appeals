@@ -362,7 +362,7 @@ def main():
     FEATURE_REDUCTION_TYPE = None # TODO try 'chi2' or l1svc
     CODED_FEATURE_NAMES = None # TODO 'geniss'
     STRAT_COLUMN = None # TODO 'geniss' # NOTE: make None to disable stratification
-    DROP_MIXED = True # TODO NORMALLY SHOULD BE FALSE!!!!
+    DROP_MIXED = False # TODO NORMALLY SHOULD BE FALSE!!!!
 
     assert not (CODED_FEATURE_NAMES and STRAT_COLUMN)
 
@@ -383,7 +383,7 @@ def main():
         DESCRIPTION += '.coded_features_'+ CODED_FEATURE_NAMES
 
     if DROP_MIXED:
-        DESCRIPTION += '.drop_mixed_'+ DROP_MIXED
+        DESCRIPTION += '.drop_mixed_'+ str(DROP_MIXED)
 
     RESULT_PATH = RESULT_PATH + '.' + DESCRIPTION
 
