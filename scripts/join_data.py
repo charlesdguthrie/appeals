@@ -550,11 +550,11 @@ def load_data(input_data_dir, output_data_dir,
 if __name__ == '__main__':
     # Main Parameters
     num_opinion_shards = 20 #1340
-    min_required_count = 2 #150
+    min_required_count = 20 #150
     tfidf = True
     coded_feature_names=None
-    input_data_dir = '/Users/pinesol/mlcs_data'
-    output_data_dir = '/tmp'
+    input_data_dir = '/scratch/cdg356/data'
+    output_data_dir = '/scratch/cdg356/data'
 
     coded_feature_names = None # TODO 
 

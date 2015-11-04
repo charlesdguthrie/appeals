@@ -7,10 +7,14 @@
 #PBS -l mem=64GB
 #PBS -N build_opinion_data
 #PBS -j oe
-#PBS -M alex.pine@nyu.edu
+#PBS -M charles.d.guthrie@gmail.com
+
+cd /scratch/cdg356/appeals
 
 module purge
+module load scikit-learn/intel/0.15.1
+module load numpy/intel/1.8.1
+module load scipy/intel/0.16.0
 
-cd /home/akp258/appeals
 
 ipython scripts/join_data.py
